@@ -73,7 +73,11 @@ def crawling(hybrid):
         visited.add(t)
         path = [(t,None)]
         bfs_queue = [path]
+        
         while len(bfs_queue) > 0:
+            if (len(bfs_queue)) > len(hybrid):
+                print('Wrong!InfLoop Warn')
+                assert False
             p = bfs_queue[0]
             bfs_queue.pop(0)
             t = p[-1][0]
@@ -83,9 +87,10 @@ def crawling(hybrid):
                 fo = get_conn(*e) # oppo
                 if fo in visited:
                     continue
+                visited.add(fo)
                 bfs_queue.append(p + [(fo,e)])
                 if len(hybrid[fo]) == 3:
-                    return bfs_queue[-1]
+                    return bfs_queue[-1] 
         return None
 
     def merge_tri_quad(tri, edge, quad): # this is a backward path
@@ -105,11 +110,11 @@ def crawling(hybrid):
         # splitter edge
 #         print('Out:', newtri, e0, qv)
         return newtri, e0, qv
-    for i in range(10):
+    for i in range(1000):
         bachelor = np.where(np.array([len(h) for h in hybrid]) == 3)[0]
-        print(len(bachelor))
+        #print(len(bachelor))
         if len(bachelor) == 0:
-            return
+            break
         path = bfs_find_tri(bachelor[0])
         tid, edge = path[-1]
         tri = hybrid[tid]
@@ -133,5 +138,3 @@ def crawling(hybrid):
             hybrid.append(f)
     return hybrid
     
-hybrid = list(f[sibling==-1]) + list(pairs)
-cpath = crawling(hybrid)
