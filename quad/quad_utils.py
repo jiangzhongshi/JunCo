@@ -1,6 +1,8 @@
 import numpy as np
 import meshplot as mp
-
+from collections import defaultdict
+import scipy
+import igl
 def catmul_clark_split(v,f):
     verts = list(v)
     tt, tti = igl.triangle_triangle_adjacency(f)
@@ -31,7 +33,7 @@ def q2e(f):
 
 def greedy_pairing(f):
     tt, tti = igl.triangle_triangle_adjacency(f)
-    occupied = -np.ones(len(f))
+    occupied = -np.ones(len(f),dtype=int)
     qid = 0
     pairs = []
     
@@ -40,6 +42,8 @@ def greedy_pairing(f):
             continue
         for e in range(3):
             fo = tt[fi,e]
+            if fo < 0:
+                continue
             if occupied[fo] >= 0:
                 continue
             occupied[fi] = fo
@@ -53,8 +57,8 @@ def greedy_pairing(f):
 
 
 from collections import defaultdict
+import tqdm
 def crawling(hybrid):
-    connect = defaultdict(lambda:[None,None])
     def set_conn(v0,v1,x):
         if v0<v1:
             connect[(v0,v1)][0] = x
@@ -62,11 +66,7 @@ def crawling(hybrid):
             connect[(v1,v0)][1] = x
     def get_conn(v0,v1):
         return connect[(v0,v1)][0] if v0<v1 else connect[(v1,v0)][1]
-    for fi, f in enumerate(hybrid):
-        ne = len(f)
-        for i in range(ne):
-            set_conn(f[i], f[(i+1)%ne],fi)
-            
+
     # BFS
     def bfs_find_tri(t:int):
         visited = set()
@@ -78,17 +78,21 @@ def crawling(hybrid):
             if (len(bfs_queue)) > len(hybrid):
                 print('Wrong!InfLoop Warn')
                 assert False
+
             p = bfs_queue[0]
             bfs_queue.pop(0)
             t = p[-1][0]
             ne = len(hybrid[t])
+            
             for i in range(ne):
                 e = hybrid[t][(i+1)%ne], hybrid[t][i]
                 fo = get_conn(*e) # oppo
-                if fo in visited:
+                if fo is None or fo in visited:
                     continue
                 visited.add(fo)
                 bfs_queue.append(p + [(fo,e)])
+#                 print(fo)
+#                 print(fo, hybrid[fo])
                 if len(hybrid[fo]) == 3:
                     return bfs_queue[-1] 
         return None
@@ -107,15 +111,24 @@ def crawling(hybrid):
             return None, None, qv
         newtri = [qv[qv.index(e0[0])-1], e0[0], e0[1]]
         qv.remove(e0[0])
-        # splitter edge
-#         print('Out:', newtri, e0, qv)
         return newtri, e0, qv
-    for i in range(1000):
+
+    connect = defaultdict(lambda:[None,None])
+    cnt_tri = 0
+    for fi, f in enumerate(hybrid):
+        ne = len(f)
+        if ne == 3:
+            cnt_tri += 1
+        for i in range(ne):
+            set_conn(f[i], f[(i+1)%ne],fi)
+
+    for i in range(cnt_tri//2 + 1):
         bachelor = np.where(np.array([len(h) for h in hybrid]) == 3)[0]
-        #print(len(bachelor))
+
         if len(bachelor) == 0:
             break
         path = bfs_find_tri(bachelor[0])
+
         tid, edge = path[-1]
         tri = hybrid[tid]
         new_quads = []
@@ -138,3 +151,51 @@ def crawling(hybrid):
             hybrid.append(f)
     return hybrid
     
+def split_edges_between_odd_components(f, cp):
+    tt,tti = igl.triangle_triangle_adjacency(f)
+    assert tt.min() >=0
+    arr = defaultdict(lambda:set())
+    for i in range(len(f)):
+        r0 = cp[i]
+        for j in range(3):
+            r1 = cp[tt[i,j]]
+            if r0 != r1:
+                v0, v1 = f[i,j], f[i,j-2]
+                arr[(min(r0,r1), max(r0,r1))].add((min(v0,v1), max(v0,v1)))
+    ijk = np.array([(k[0],k[1],1) for k, l in arr.items()],dtype=int)
+    n_comp = cp.max()+1
+    comp_adj = scipy.sparse.coo_matrix(arg1=(ijk[:,2], ijk[:,:2].T), shape=(n_comp,n_comp))
+
+    odd_comps = np.where([np.count_nonzero(cp==i)%2 for i in range(max(cp) + 1)])[0]
+    assert len(odd_comps)%2 == 0
+    
+    length, predec = scipy.sparse.csgraph.shortest_path(comp_adj, directed=False, indices=odd_comps, return_predecessors=True)
+
+    def trace_path(prec, i,j):
+        assert prec[i] <0
+        path = [j]
+        while True:
+            p = prec[path[-1]]
+            if p < 0:
+                break
+            path.append(p)
+        return path
+
+    odd_pairing = []
+
+    
+    visited = np.zeros(len(odd_comps))
+    for i,c in enumerate(odd_comps):
+        if visited[i] == 1:
+            continue
+        length[i][c] = np.inf
+        length[i][odd_comps[visited==1]] = np.inf
+        j = length[i][odd_comps].argmin()
+        visited[i] = visited[j] = 1
+        path = trace_path(predec[i], c, odd_comps[j])
+        odd_pairing.append((c, odd_comps[j], path))
+
+    split_pairs = []
+    for i,j, path in odd_pairing:
+        split_pairs += [tuple(sorted(i)) for i in zip(path[:-1], path[1:])]
+    return [next(iter(arr[s])) for s in split_pairs]

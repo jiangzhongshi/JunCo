@@ -5,8 +5,6 @@ import h5py
 import plotly.graph_objects as go
 import pythreejs as p3s
 import scipy
-from sidecar import Sidecar
-
 
 from IPython.core.display import display, HTML
 #display(HTML("<style>.container { width:100% !important; }</style>"))
@@ -490,7 +488,6 @@ def control_points_duplicate_consistent():
 
 def highorder_sv(cp,level=3, order=3):
     import sys
-    sys.path.append('../python')
     from curve import fem_generator
     def local_upsample(level:int):
         usV, usF = igl.upsample(np.eye(3)[:,1:], np.arange(3)[None,:], level)
@@ -508,7 +505,6 @@ def highorder_sv(cp,level=3, order=3):
     
 def reorder_tetra():
     import sys
-    sys.path.append('../python')
 
     from curve import fem_generator
 
