@@ -487,7 +487,6 @@ def control_points_duplicate_consistent():
             print(v)
 
 def highorder_sv(cp,level=3, order=3):
-    import sys
     from curve import fem_generator
     def local_upsample(level:int):
         usV, usF = igl.upsample(np.eye(3)[:,1:], np.arange(3)[None,:], level)
