@@ -1,8 +1,30 @@
 import numpy as np
 from curve import fem_generator as fetaa
 import igl
+import scipy
 
 ref_quad = np.array([[0,0],[1,0],[1,1],[0,1.]])
+
+import osqp
+import scipy
+def quadratic_minimize(A,b, known=None):
+    if known is None:
+        if scipy.sparse.issparse(A):
+            return scipy.sparse.linalg.spsolve(A.T@A,A.T@b)
+        else:
+            return scipy.linalg.solve(A.T@A,A.T@b)
+    kid, kval = known
+    mask = np.zeros(A.shape[1])
+    mask[kid] = 1
+    L = A.T@A
+    rhs = A.T@b
+    Lii = L[mask==0][:,mask==0]
+    Lik = L[mask==0][:,mask==1]
+    x = np.zeros((A.shape[1],3))
+    x[mask==1] = kval
+    x[mask==0] = scipy.sparse.linalg.spsolve(Lii, 
+                                             rhs[mask==0] - Lik@kval)        
+    return x
 
 def quad_trim_assign(siblings, faces):
     quad_assign = - np.ones(len(faces),dtype=int)
@@ -153,8 +175,8 @@ def bezier_eval(x, cp, order=3):
     tg1d = np.array([order - np.arange(order + 1),  np.arange(order + 1)]).T
     bas_x = feta.bernstein_evaluator(x,x*0,x*0, tg1d).T
     return bas_x@cp
-
-def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv):
+import pdb
+def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query):
     F_qh_sample = quad_ho_F(quads, level = level)
     F_qh_order = quad_ho_F(quads, level = order)
     assert F_qh_sample.shape[1] == bsv.shape[0]
@@ -163,9 +185,10 @@ def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv):
     ijk, vals = [], []
 
     for q, (t0,t1) in enumerate(q2t):
-        tbc0 = sample_for_quad_trim(trim_types[t0], trim_types[t1], level)
-        pts = eval_bc(V, F[[t0,t1]], tbc0.astype(int), level)
-        sample_vals = simple_query(pts)
+        tbc0 = np.array(sample_for_quad_trim(trim_types[t0], trim_types[t1], level),dtype=int)
+        tbc0[:,0] = np.asarray([t0,t1])[tbc0[:,0]]
+        sample_vals = query(tbc0, denom=level)
+
         all_samples[F_qh_sample[q]] = sample_vals
         sample_q, order_q = F_qh_sample[q], F_qh_order[q]
         for i, si in enumerate(sample_q):
@@ -187,9 +210,9 @@ def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv):
 def solo_cc_split(V, F, siblings, t2q, quads, q_cp, level, order):
     # Global F, TT,TTi
     assert len(q_cp) == len(quads)
+    solos = np.where(siblings==-1)[0]
     
     TT,TTi = igl.triangle_triangle_adjacency(F)
-    solos = np.where(siblings==-1)[0]
     
     edge_node_map = {tuple(sorted(k)):i 
                      for i,k in enumerate(standard_codec_list(order))}
@@ -241,7 +264,8 @@ def solo_cc_split(V, F, siblings, t2q, quads, q_cp, level, order):
     return (np.concatenate([newverts,igl.barycenter(V,F[solos])]), 
             known_cod2cp, newquads)
 
-def constrained_cc_fit(V, F, siblings, newquads, known_cp, level, order, bsv):
+def constrained_cc_fit(V, F, siblings, newquads, known_cp, level, order, bsv, query):
+    solos = np.where(siblings==-1)[0]
     newF = F[siblings==-1]
     assert len(newF)*3 == len(newquads)
     F_sa = quad_ho_F(newquads, level=level)
@@ -288,12 +312,11 @@ def constrained_cc_fit(V, F, siblings, newquads, known_cp, level, order, bsv):
     for qi, q in enumerate(newquads):
         tbc = np.zeros(((level+1)**2, 4), 
                        dtype=int)
+        tbc[:,0] = solos[qi//3]
         tbc[:,2:] = type2bc[qi%3]
         tbc[:,1] = 6*(level)**2 - tbc[:,2:].sum(axis=1)
         assert tbc[:,1].min() >= 0
-        pts = eval_bc(V, newF[[qi//3]], 
-                      tbc, denom=6*(level)**2)
-        sample_vals = simple_query(pts)
+        sample_vals = query(tbc, denom=6*(level)**2)
         all_samples[F_sa[qi]] = sample_vals
         sample_q, order_q = F_sa[qi], F_or[qi]
         for i, si in enumerate(sample_q):

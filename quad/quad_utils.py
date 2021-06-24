@@ -32,28 +32,30 @@ def q2e(f):
     return np.array([f[:,i] for i in [[0, 1],[1,2],[2,3],[3,0]]]).reshape(-1,2)
 
 
-def greedy_pairing(f):
+def greedy_pairing(f, score):
     tt, tti = igl.triangle_triangle_adjacency(f)
     occupied = -np.ones(len(f),dtype=int)
     qid = 0
     pairs = []
-    
+    queue = []
     for fi in range(len(f)):
+        for e in range(3):
+            queue.append((score(fi,e), fi,e))
+    queue = sorted(queue)
+    for _, fi,e in queue:
         if occupied[fi] >= 0:
             continue
-        for e in range(3):
-            fo = tt[fi,e]
-            if fo < 0:
-                continue
-            if occupied[fo] >= 0:
-                continue
-            occupied[fi] = fo
-            occupied[fo] = fi
-            q = list(f[fi])
-            q.insert(e+1, f[fo][tti[fi,e]-1])
-            pairs.append(q)
-            qid += 1
-            break
+        fo = tt[fi,e]
+        if fo < 0:
+            continue
+        if occupied[fo] >= 0:
+            continue
+        occupied[fi] = fo
+        occupied[fo] = fi
+        q = list(f[fi])
+        q.insert(e+1, f[fo][tti[fi,e]-1])
+        pairs.append(q)
+        qid += 1
     return occupied, pairs
 
 
