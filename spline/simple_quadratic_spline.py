@@ -340,14 +340,10 @@ def fit(uv_fit, V, F, size, surf, filename=None):
         surf.serialize(filename)
     return surf
 
-from util.igl_common import *
 import scipy.interpolate
 if __name__ == '__main__':
-    V, F = Xd(), Xi()
-    UV,VN, TF, FN = Xd(),Xd(),Xi(),Xi()
-    igl.readOBJ('/home/zhongshi/Workspace/Scaffold-Map/camel_b.obj', V, UV, VN, F, TF, FN)
+    V,uv_fit, _, F,TF,_ = igl.read_obj('/home/zhongshi/Workspace/Scaffold-Map/camel_b.obj')
 
-    V,F,uv_fit = e2p(V),e2p(F),e2p(UV)
     V /= V.max()*4
         # V, uv_fit = npl['V'], npl['uv_opt']
     uv_fit -= uv_fit.min(axis=0)
