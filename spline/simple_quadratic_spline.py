@@ -63,7 +63,7 @@ class BSplineSurface:
         self.TH, self.device = False, 'cpu'
 
     @staticmethod
-    def _bspev_and_c_vec(x, width, poly_coef):
+    def _bspev_and_c(x, width, poly_coef):
         degree = poly_coef.shape[1]
 
         xi = np.floor(np.clip(x,0,width-0.1)).astype(np.int64)
@@ -78,9 +78,9 @@ class BSplineSurface:
         return b, i # there may be many zeros here to prune
 
     @staticmethod
-    def _global_basis_row_vec(x, width, scale, du=0, dv=0):
-        bu, iu = BSplineSurface._bspev_and_c_vec(x[:,0], width[0], poly_coefs[du])
-        bv, iv = BSplineSurface._bspev_and_c_vec(x[:,1], width[1], poly_coefs[dv])
+    def _global_basis_row(x, width, scale, du=0, dv=0):
+        bu, iu = BSplineSurface._bspev_and_c(x[:,0], width[0], poly_coefs[du])
+        bv, iv = BSplineSurface._bspev_and_c(x[:,1], width[1], poly_coefs[dv])
         outer = np.einsum('bi,bo->bio', bu * (scale[0]**du), bv * (scale[1]**dv)).flatten()
 
         dim1 = (width[1]) + 2 # dim of controls, due to np rowmajor
@@ -90,8 +90,8 @@ class BSplineSurface:
 
     @staticmethod
     def _global_basis_grad_row_vec(x, width, scale): # regularization in [Forsey and Wong 1998]
-        row0, col0, data0 = BSplineSurface._global_basis_row_vec(x, width, scale, 0, 1)
-        row1, col1, data1 = BSplineSurface._global_basis_row_vec(x, width, scale, 1, 0)
+        row0, col0, data0 = BSplineSurface._global_basis_row(x, width, scale, 0, 1)
+        row1, col1, data1 = BSplineSurface._global_basis_row(x, width, scale, 1, 0)
         row1 += row0.max()+1
         return (np.concatenate([row0, row1 ]),
                 np.concatenate([col0, col1]),
@@ -99,8 +99,8 @@ class BSplineSurface:
 
     def ev(self, x, du=0, dv=0):
         x = self.transform(x)
-        bu, iu = BSplineSurface._bspev_and_c_vec(x[:,0], self.width[0], poly_coefs[du])
-        bv, iv = BSplineSurface._bspev_and_c_vec(x[:,1], self.width[1], poly_coefs[dv])
+        bu, iu = BSplineSurface._bspev_and_c(x[:,0], self.width[0], poly_coefs[du])
+        bv, iv = BSplineSurface._bspev_and_c(x[:,1], self.width[1], poly_coefs[dv])
 
         coef_iuv = [c[(np.expand_dims(iu,2), np.expand_dims(iv,1))] for c in self.coef]
         bu *= self.scale[0]**(du)
@@ -113,7 +113,7 @@ class BSplineSurface:
         def add_half(l):
             return [0.5] + list(range(l)) #+ [l-0.5]
         num_reg = 4
-        row0, col0, data0 = self._global_basis_row_vec(X, self.width, self.scale)
+        row0, col0, data0 = self._global_basis_row(X, self.width, self.scale)
         if regularize:
             regularizer = [[i,j] for i in add_half(num_reg*width[0]) for j in add_half(num_reg*width[1])]
             regularizer = np.array(regularizer)/num_reg
@@ -211,7 +211,7 @@ class SparseBSplineSurface:
         Xi, cnts = np.unique(np.round(X_offend).astype(np.int64),axis=0, return_counts=True)
 
         if active_cp is None:
-            _, col_offend,_ = BSplineSurface._global_basis_row_vec(X_offend, self.width,self.scale)
+            _, col_offend,_ = BSplineSurface._global_basis_row(X_offend, self.width,self.scale)
             col0, cnt = np.unique(col_offend, return_counts=True)
             self.unique_col =col0
         else:
@@ -227,7 +227,7 @@ class SparseBSplineSurface:
         assert len(init_points)!=0
         f = new_values[in_range]
 
-        row0, col_total, data0 = BSplineSurface._global_basis_row_vec(total_points, self.width, self.scale)
+        row0, col_total, data0 = BSplineSurface._global_basis_row(total_points, self.width, self.scale)
         
         unique_map = {i:v for v,i in enumerate(self.unique_col)}
         self.sparse_col = np.vectorize(lambda k:unique_map.get(k,-1))
@@ -238,7 +238,7 @@ class SparseBSplineSurface:
         timer_utils.timer()
         if regularize:
             reg = SparseBSplineSurface.get_2d_neighbors(Xi, np.linspace(-4,4,9), self.width[0])
-            row1, col1, data1 = BSplineSurface._global_basis_hessian_row_vec(reg, self.width, self.scale)
+            row1, col1, data1 = BSplineSurface._global_basis_hessian_row(reg, self.width, self.scale)
             row1, col1, data1 = self.remap_row_col_data(row1, col1, data1)
             timer_utils.timer('Regularize')
             timer_utils.timer()
@@ -295,8 +295,8 @@ class SparseBSplineSurface:
         x = x[in_range]
         if len(x) == 0:
             return result
-        bu, iu = BSplineSurface._bspev_and_c_vec(x[:,0], self.width[0], poly_coefs[du])
-        bv, iv = BSplineSurface._bspev_and_c_vec(x[:,1], self.width[1], poly_coefs[dv])
+        bu, iu = BSplineSurface._bspev_and_c(x[:,0], self.width[0], poly_coefs[du])
+        bv, iv = BSplineSurface._bspev_and_c(x[:,1], self.width[1], poly_coefs[dv])
         ic = (np.expand_dims(iu, 2) * dim1 + np.expand_dims(iv, 1))
         uic, inv = np.unique(ic, return_inverse=True)
         iuv_mapped = self.sparse_col(uic)[inv].reshape(-1,4,4)

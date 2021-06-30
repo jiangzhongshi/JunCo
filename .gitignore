@@ -2,3 +2,7 @@
 .ipynb
 __pycache__
 *.ipynb
+*.log
+*.npz
+*.pyc
+.vscode/

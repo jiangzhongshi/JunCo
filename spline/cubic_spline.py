@@ -5,54 +5,56 @@ import tqdm
 import torch
 import numpy as np
 import numba
-from util import param_util, torch_utils, timer_utils, utils
 from sksparse.cholmod import cholesky_AAt
 
-# [x^0, x^1, x^2, x^3]
-poly_coef = [[
-    np.array([0, 0, 0, 1]) / 6,
-    np.array([4, -12, 12, -3]) / 6,
-    np.array([-44, 60, -24, 3]) / 6,
-    np.array([64, -48, 12, -1]) / 6
-], [
-    np.array([0, 0, 0, 1]) / 6,
-    np.array([9, -27, 27, -7]) / 12,
-    np.array([-135, 189, -81, 11]) / 12
-], [
-    np.array([0, 0, 0, 1]) / 4,
-    np.array([8, -24, 24, -7]) / 4
-], [
-    np.array([0, 0, 0, 1])
-]] + [[  # reversed part
-    np.array([1, -3, 3, -1]),
-], [
-    np.array([0, 12, -18, 7]) / 4,
-    np.array([8, -12, 6, -1]) / 4
-], [
-    np.array([0, 0, 18, -11]) / 12,
-    np.array([-18, 54, -36, 7]) / 12,
-    np.array([27, -27, 9, -1]) / 6
-]]
-
-
-def poly_coef_derivative(coef):
+def cubic_bspline_polynomial_coeffs(derivative=0):
+    """Tabulate cubic bspline basis functions and their derivatives.
+    The basis span several knots.
+    Returns:
+        [type]: [description]
     """
-    Take derivative of poly coefficients
-    degree(coef) is len(j)-1
-    """
-    return [[np.arange(1, len(j)) * j[1:] for j in i] for i in coef]
+    # [x^0, x^1, x^2, x^3]
+    poly_coef = [[
+        np.array([0, 0, 0, 1]) / 6,
+        np.array([4, -12, 12, -3]) / 6,
+        np.array([-44, 60, -24, 3]) / 6,
+        np.array([64, -48, 12, -1]) / 6
+    ], [
+        np.array([0, 0, 0, 1]) / 6,
+        np.array([9, -27, 27, -7]) / 12,
+        np.array([-135, 189, -81, 11]) / 12
+    ], [
+        np.array([0, 0, 0, 1]) / 4,
+        np.array([8, -24, 24, -7]) / 4
+    ], [
+        np.array([0, 0, 0, 1])
+    ]] + [[  # reversed part
+        np.array([1, -3, 3, -1]),
+    ], [
+        np.array([0, 12, -18, 7]) / 4,
+        np.array([8, -12, 6, -1]) / 4
+    ], [
+        np.array([0, 0, 18, -11]) / 12,
+        np.array([-18, 54, -36, 7]) / 12,
+        np.array([27, -27, 9, -1]) / 6
+    ]]
+    inverse_seg_coef = (np.cumsum([0] + [len(p) for p in poly_coef[:-1]]))
 
+    def poly_coef_derivative(coef):
+        """
+        Take derivative of poly coefficients
+        degree(coef) is len(j)-1
+        """
+        return [[np.arange(1, len(j)) * j[1:] for j in i] for i in coef]
+    def flatten(l): return np.asarray([j for i in l for j in i])
 
-poly_coef_d1 = poly_coef_derivative(poly_coef)
-poly_coef_d2 = poly_coef_derivative(poly_coef_d1)
+    poly_list = [poly_coef]
+    for _ in derivatives:
+        poly_list.append(poly_coef_derivative(poly_list[-1]))
+    
+    return (list(map(flatten, poly_list))), inverse_seg_coef
 
-
-def flatten(l): return np.asarray([j for i in l for j in i])
-
-
-poly_coefs = (list(map(flatten, [poly_coef, poly_coef_d1, poly_coef_d2])))
-
-multi_segment_to_coefid_cs = np.cumsum([0, 4, 3, 2, 1, 1, 2])
+poly_coefs, multi_segment_to_coefid_cs = cubic_bspline_polynomial_coeffs(2)
 """
 This is a specific table construction. Each row stores the polynomial segments to use
 Left: 0 point for x, evaluated as f(x-Left)
@@ -61,13 +63,6 @@ Segment: from left to right, which of the segment is used here.
 b_id: id of the basis, corresponding to control coefficent access
 in the end, an additional last row is added for the purpose of evaluating on the last ending knot.
 """
-@numba.jit(nopython=True)
-def multi_segment_to_coefid(multi, segment):
-    return multi_segment_to_coefid_cs[multi] + segment
-
-@numba.jit(nopython=True)
-def left_multi_to_c(left, multi):
-    return multi + 3 if left == 0 else left + 3
 
 @numba.jit(nopython=True)
 def base_from_i_j(length, i,j):
@@ -80,8 +75,8 @@ def base_from_i_j(length, i,j):
         left = 0
     elif i + j >= length - 2:
         multi = (i + j) - length + 2
-    b_id = left_multi_to_c(left, multi)
-    c_id = multi_segment_to_coefid(multi, segment)
+    b_id = multi + 3 if left == 0 else left + 3  # left_multi_to_c
+    c_id = multi_segment_to_coefid_cs[multi] + segment
     return left, c_id, b_id
 
 @numba.jit(nopython=True)
@@ -95,19 +90,29 @@ def table_constructor(length, x):
 
 
 class BSplineSurface:
-    def __init__(self, start, resolution, width, coef=None):
+    """Cubic BSpline with uniform knots.
+
+    Note: regularizer is forcing the function to be 3D.
+    """
+    def __init__(self,*, start=[0,0], resolution=[1,1], width=[3,3], coef=None):
+        """initialize basic parameters
+
+        Args:
+            start ([0,0]): used for transformation
+            resolution ([type]): indicate the scale of the patch.
+            width ([type]): knot interval number.
+            coef ([type], optional): control points, should be (3,w+3,w+3). Defaults to None.
+        """
         self.start = np.asarray(start)
         self.scale = 1 / np.asarray(resolution)
         self.table = [np.asarray(table_1d(w)) for w in width]
         self.width = width # number of intervals
-        # Note to myself, this coef is control vertices value, not the same as coefs of basis functions.
-        # Maybe better be renamed to self.control TODO
         self.coef = coef
         self.cache_factor = None
         self.TH, self.device = False, 'cpu'
 
     @staticmethod
-    def _bspev_and_c_vec(x, table, poly_coef):
+    def _bspev_and_c(x, table, poly_coef):
         # timer_utils.timer()
         if type(table) is int:
             xi = np.floor(x).astype(np.int64)
@@ -129,9 +134,9 @@ class BSplineSurface:
         return b, i # there may be many zeros here to prune
 
     @staticmethod
-    def _global_basis_row_vec(x, tables, scale, du=0, dv=0):
-        bu, iu = BSplineSurface._bspev_and_c_vec(x[:,0], tables[0], poly_coefs[du])
-        bv, iv = BSplineSurface._bspev_and_c_vec(x[:,1], tables[1], poly_coefs[dv])
+    def _global_basis_row(x, tables, scale, du=0, dv=0):
+        bu, iu = BSplineSurface._bspev_and_c(x[:,0], tables[0], poly_coefs[du])
+        bv, iv = BSplineSurface._bspev_and_c(x[:,1], tables[1], poly_coefs[dv])
         outer = np.einsum('bi,bo->bio', bu * (scale[0]**du), bv * (scale[1]**dv)).flatten()
         if type(tables[0]) is int:
             dim1 = tables[1] + 2
@@ -143,8 +148,8 @@ class BSplineSurface:
 
     @staticmethod
     def _global_basis_d2_row_vec(x, tables, scale):
-        row0, col0, data0 = BSplineSurface._global_basis_row_vec(x, tables, scale, 0, 2)
-        row1, col1, data1 = BSplineSurface._global_basis_row_vec(x, tables, scale, 2, 0)
+        row0, col0, data0 = BSplineSurface._global_basis_row(x, tables, scale, 0, 2)
+        row1, col1, data1 = BSplineSurface._global_basis_row(x, tables, scale, 2, 0)
         row1 += row0.max()
         return (np.concatenate([row0, row1]),
                 np.concatenate([col0, col1]),
@@ -152,10 +157,10 @@ class BSplineSurface:
 
 
     @staticmethod
-    def _global_basis_hessian_row_vec(x, tables, scale): # regularization in [Forsey and Wong 1998]
-        row0, col0, data0 = BSplineSurface._global_basis_row_vec(x, tables, scale, 0, 2)
-        row1, col1, data1 = BSplineSurface._global_basis_row_vec(x, tables, scale, 2, 0)
-        row2, col2, data2 = BSplineSurface._global_basis_row_vec(x, tables, scale, 1, 1)
+    def _global_basis_hessian_row(x, tables, scale): # regularization in [Forsey and Wong 1998]
+        row0, col0, data0 = BSplineSurface._global_basis_row(x, tables, scale, 0, 2)
+        row1, col1, data1 = BSplineSurface._global_basis_row(x, tables, scale, 2, 0)
+        row2, col2, data2 = BSplineSurface._global_basis_row(x, tables, scale, 1, 1)
         row1 += row0.max()+1
         row2 += row1.max()+1
         return (np.concatenate([row0, row1, row2]),
@@ -165,18 +170,21 @@ class BSplineSurface:
 
     def ev(self, x, du=0, dv=0):
         x = self.transform(x)
-        bu, iu = BSplineSurface._bspev_and_c_vec(x[:,0], self.table[0], poly_coefs[du])
-        bv, iv = BSplineSurface._bspev_and_c_vec(x[:,1], self.table[1], poly_coefs[dv])
+        bu, iu = BSplineSurface._bspev_and_c(x[:,0], self.table[0], poly_coefs[du])
+        bv, iv = BSplineSurface._bspev_and_c(x[:,1], self.table[1], poly_coefs[dv])
 
         coef_iuv = [c[(np.expand_dims(iu,2), np.expand_dims(iv,1))] for c in self.coef]
         outer = np.einsum('bi,bo->bio', bu* (self.scale[0]**(du)), bv * (self.scale[1]**(dv)))
         return np.hstack([np.sum(c*outer, axis=(1,2)).reshape(-1,1) for c in coef_iuv])
 
     def interpolate(self, X, f, regularizer=None, cur_ev=None):
+        # regularizer = [] means not regularization.
         if self.cache_factor is None:
             X = self.transform(X)
+            reg_scale = 1e-3
             if regularizer is not None:
-                regularizer = self.transform(regularizer)
+                if len(regularizer) != 0:
+                    regularizer = self.transform(regularizer)
             else:
                 width = [w+1 for w in self.width]
                 def add_half(l):
@@ -184,34 +192,36 @@ class BSplineSurface:
                 num_reg = 4
                 regularizer = [[i,j] for i in add_half(num_reg*width[0]) for j in add_half(num_reg*width[1])]
                 regularizer = np.array(regularizer)/num_reg
-            row0, col0, data0 = self._global_basis_row_vec(X, self.table, self.scale)
-            row1, col1, data1 = self._global_basis_hessian_row_vec(regularizer, self.table, self.scale)
-            row1 += row0.max()+1
-            reg_scale = 1e-3
-            data1 *= reg_scale
-            row0, col0, data0 = (np.concatenate([row0, row1]),
-                                 np.concatenate([col0, col1]),
-                                 np.concatenate([data0, data1]))
+            row0, col0, data0 = self._global_basis_row(X, self.table, self.scale)
+            print(row0.max())
+            print(regularizer)
+            if len(regularizer) > 0:
+                row1, col1, data1 = self._global_basis_hessian_row(regularizer, self.table, self.scale)
+                row1 += row0.max()+1
+                
+                data1 *= reg_scale
+                row0, col0, data0 = (np.concatenate([row0, row1]),
+                                     np.concatenate([col0, col1]),
+                                     np.concatenate([data0, data1]))
             A = scipy.sparse.csr_matrix((data0, (row0, col0)),
                                          shape=(row0.max()+1,
                                                  (self.width[0]+3)*(self.width[1]+3)))
 
-            print(A.shape)
 
             factor = cholesky_AAt(A.T, beta=1e-10)
-            self_cache_factor = factor
-            self_cache_At = A.T
+            self.cache_factor = factor
+            self.cache_At = A.T
 
         reg = regularizer
         if cur_ev is None:
-            reg_vec = np.zeros((reg.shape[0]*3,3))
+            reg_vec = np.zeros((len(reg)*3,3))
         else:
             reg_vec =  np.vstack([cur_ev(reg/self.width, dv=2), 
                                 cur_ev(reg/self.width,du=2),
                                 2*cur_ev(reg/self.width, du=1, dv=1)])
         f2 = reg_scale * reg_vec
         f = np.vstack([f, f2])[:A.shape[0]]
-        coef = self_cache_factor(A.T@f)
+        coef = self.cache_factor(self.cache_At@f)
         res = (A @ coef - f)
         print('Residual', np.linalg.norm(res,axis=0))
         # print('Residual', np.linalg.norm(A.T@A @ coef - A.T@f, axis=0))
@@ -277,11 +287,10 @@ class BSplineSurface:
 
 
 class SparseBSplineSurface:
+    # Sparse version, as building block for hierarchical splines.
     def __init__(self, start, resolution, width, coef=None):
         self.start = np.asarray(start)
         self.scale = 1 / np.asarray(resolution)
-        # Note to myself, this coef is control vertices value, not the same as coefs of basis functions.
-        # Maybe better be renamed to self.control TODO
         self.width = width
         assert width[0] == width[1], "Some of out-of-range detector relies on square"
         self.dim = [w+3 for w in width]
@@ -319,7 +328,7 @@ class SparseBSplineSurface:
 
             # active_corners = SparseBSplineSurface.get_2d_neighbors(Xi, range(2), self.width[0]) + 3
             # col0 = active_corners[:,0]*dim[0]+active_corners[:,1]
-            _,col0, _ = BSplineSurface._global_basis_row_vec(Xi, self.table, self.scale)
+            _,col0, _ = BSplineSurface._global_basis_row(Xi, self.table, self.scale)
             self.unique_col = np.unique(col0)
             unique_map = {i:v for v,i in enumerate(self.unique_col)}
             self.sparse_col = np.vectorize(lambda k:unique_map.get(k,-1))
@@ -339,13 +348,13 @@ class SparseBSplineSurface:
             timer_utils.timer('Val')
             timer_utils.timer()
             total_points = init_points
-            row0, col0, data0 = BSplineSurface._global_basis_row_vec(total_points, self.table, self.scale)
+            row0, col0, data0 = BSplineSurface._global_basis_row(total_points, self.table, self.scale)
             row0, col0, data0 = self.remap_row_col_data(row0, col0, data0)
 
             timer_utils.timer('Data')
 
             reg = SparseBSplineSurface.get_2d_neighbors(Xi, np.linspace(-4,4,18), self.width[0])
-            row1, col1, data1 = BSplineSurface._global_basis_hessian_row_vec(reg, self.table, self.scale)
+            row1, col1, data1 = BSplineSurface._global_basis_hessian_row(reg, self.table, self.scale)
             row1, col1, data1 = self.remap_row_col_data(row1, col1, data1)
             row1 += row0.max()+1
             data1 *= reg_scale
@@ -414,8 +423,8 @@ class SparseBSplineSurface:
         x = x[in_range]
         if len(x) == 0:
             return result
-        bu, iu = BSplineSurface._bspev_and_c_vec(x[:,0], self.table[0], poly_coefs[du])
-        bv, iv = BSplineSurface._bspev_and_c_vec(x[:,1], self.table[1], poly_coefs[dv])
+        bu, iu = BSplineSurface._bspev_and_c(x[:,0], self.table[0], poly_coefs[du])
+        bv, iv = BSplineSurface._bspev_and_c(x[:,1], self.table[1], poly_coefs[dv])
         ic = (np.expand_dims(iu, 2) * dim1 + np.expand_dims(iv, 1))
         uic, inv = np.unique(ic, return_inverse=True)
         iuv_mapped = self.sparse_col(uic)[inv].reshape(-1,4,4)
