@@ -1,10 +1,10 @@
-import pdb
 from curve import fem_generator as feta
 import osqp
 import numpy as np
 from curve import fem_generator as fetaa
 import igl
 import scipy
+import tqdm
 
 ref_quad = np.array([[0, 0], [1, 0], [1, 1], [0, 1.]])
 
@@ -210,7 +210,7 @@ def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query):
     all_samples = np.zeros((F_qh_sample.max() + 1, 3))
     ijk, vals = [], []
 
-    for q, (t0, t1) in enumerate(q2t):
+    for q, (t0, t1) in enumerate(tqdm.tqdm(q2t)):
         tbc0 = np.array(sample_for_quad_trim(trim_types[t0], trim_types[t1], level),
                         dtype=int)
         tbc0[:, 0] = np.asarray([t0, t1])[tbc0[:, 0]]
@@ -234,9 +234,10 @@ def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query):
     return all_cp
 
 
-def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int):
+def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int, subd = None):
     """Catmul-Clark style split for the solo triangles.
-
+    
+    Default, use Bezier subdivision algorithm to assign for the subsequent constraints.
     Returns information for constrained nodes and more.
     Args:
         V (np.array): TriMesh Vertices
@@ -252,7 +253,8 @@ def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int):
     """
     assert len(q_cp) == len(quads)
     solos = np.where(siblings == -1)[0]
-
+    if subd is None:
+        subd = bezier_subd
     TT, TTi = igl.triangle_triangle_adjacency(F)
 
     edge_node_map = {tuple(sorted(k)): i
@@ -288,7 +290,7 @@ def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int):
             tup_list = [tuple(sorted([qv0]*t0 + [qv1]*t1)) for t0, t1 in tup1d]
             cp_list = np.asarray([q_cp[qid][edge_node_map[t]]
                                   for t in tup_list])
-            cp0, cp1 = bezier_subd(cp_list)
+            cp0, cp1 = subd(cp_list)
             for i, (t0, t1) in enumerate(tup1d):
                 known_cod2cp[tuple(sorted([v0]*t0 + [avail_id]*t1))] = cp0[i]
                 known_cod2cp[tuple(sorted([avail_id]*t0 + [v1]*t1))] = cp1[i]
@@ -307,7 +309,23 @@ def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int):
             known_cod2cp, newquads)
 
 
-def constrained_cc_fit(V, F, siblings, newquads, known_cp, level, order, bsv, query):
+def constrained_cc_fit(V, F, siblings, newquads, known_cp, level:int, order:int, bsv, query):
+    """Constrained Bezier fitting for the c-c split quads.
+
+    Args:
+        V ([type]): [description]
+        F ([type]): [description]
+        siblings ([type]): [description]
+        newquads ([type]): [description]
+        known_cp (Map): codec -> control coeffs.
+        level (int): Sampling level for least squares.
+        order (int): Curved Order
+        bsv ([type]): [description]
+        query ([type]): [description]
+
+    Returns:
+        [type]: [description]
+    """
     solos = np.where(siblings == -1)[0]
     newF = F[siblings == -1]
     assert len(newF)*3 == len(newquads)
@@ -316,7 +334,7 @@ def constrained_cc_fit(V, F, siblings, newquads, known_cp, level, order, bsv, qu
 
     std_codec = standard_codec_list(order)
     known_dict = dict()
-    for q, quad in enumerate(newquads):
+    for q, quad in enumerate(tqdm.tqdm(newquads)):
         for e, code in enumerate(std_codec):
             if code[0] < 0:
                 continue

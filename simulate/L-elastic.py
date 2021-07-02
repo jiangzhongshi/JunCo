@@ -36,7 +36,7 @@ def prepare_I_mesh(cell_size):
     return vm.vertices, vm.voxels
 
   
-def check_stress(v,t):
+def check_stress(v,t,order):
     sys.stdout.flush()
     solver = pf.Solver()
     solver.set_mesh(v,t)
@@ -50,7 +50,7 @@ def check_stress(v,t):
         return 1
     solver.set_boundary_side_set_from_bary(sideset)
 
-    settings = pf.Settings()
+    settings = pf.Settings(discr_order=order)
     problem = pf.Problem()
 
     settings.set_pde(pf.PDEs.LinearElasticity)
@@ -72,21 +72,23 @@ def check_stress(v,t):
 
     misises = solver.get_sampled_mises()
 
-    p_uni, indices, inverse = np.unique(p, return_index=True, return_inverse=True, axis=0)
-    t_uni = np.array([inverse[t[:, 0]], inverse[t[:, 1]], inverse[t[:, 2]], inverse[t[:, 3]]]).transpose()
-    d_uni = d[indices, :]
-
+    pi_uni, indices, inverse = np.unique((p*1e8).astype(int), return_index=True, return_inverse=True, axis=0)
+    p_uni = p[indices]
+    t_uni = inverse[t]
+    d_uni = d[indices]
+    sys.stdout.flush()
+    print(misises.max())
     return p_uni, t_uni, d_uni, misises[indices]
 
 
-def main(mesh_type, cell_size):
+def main(mesh_type, cell_size, order):
     if mesh_type == 'L':
 	    v, t = prepare_L_mesh(cell_size=cell_size)
     elif mesh_type == 'I':
         v, t = prepare_I_mesh(cell_size=cell_size)
-    points ,tets, displ, stress = check_stress(v,t)
+    points ,tets, displ, stress = check_stress(v,t, order)
 
-    np.savez(f'data/{mesh_type}stress-cell{cell_size}.npz', p=points, t = tets, d=displ, s=stress)
+    np.savez(f'data/{mesh_type}stress-cell{cell_size}_p{order}.npz', p=points, t = tets, d=displ, s=stress)
 
 if __name__ == '__main__':
 	import fire

@@ -7,7 +7,7 @@ import numpy as np
 import numba
 from sksparse.cholmod import cholesky_AAt
 
-def cubic_bspline_polynomial_coeffs(derivative=0):
+def cubic_bspline_polynomial_coeffs(derivatives=0):
     """Tabulate cubic bspline basis functions and their derivatives.
     The basis span several knots.
     Returns:
@@ -49,7 +49,7 @@ def cubic_bspline_polynomial_coeffs(derivative=0):
     def flatten(l): return np.asarray([j for i in l for j in i])
 
     poly_list = [poly_coef]
-    for _ in derivatives:
+    for _ in range(derivatives):
         poly_list.append(poly_coef_derivative(poly_list[-1]))
     
     return (list(map(flatten, poly_list))), inverse_seg_coef
@@ -479,7 +479,22 @@ def interp_surface():
         py.plot([go.Scatter3d(x=X[:, 0], y=X[:, 1], z=Z.ravel(), mode='markers')
                     , go.Surface(x=xx,y=yy, z=zz)])
 
-import quadpy
+def test_partition_unity_1d():
+    width = 4
+    dim = width+3
+
+    x = np.linspace(0,4,10)
+    table = np.asarray(csp.table_1d(width))
+    bu, iu = csp.BSplineSurface._bspev_and_c(x, table, csp.poly_coefs[0])
+
+    A = np.zeros((10,dim))
+    for k, (i,b) in enumerate(zip(iu,bu)):
+        A[k,i] = b
+
+    coef = np.ones(dim)
+
+    assert abs((A@coef).sum() - 10) < 1e-5
+
 def fit(uv_fit, V, F, size, surf, filename=None):
     timer_utils.timer()
     X = np.asarray([[i, j] for i in np.linspace(0, 1, size * 2) for j in np.linspace(0, 1, size * 2)])
