@@ -185,8 +185,7 @@ def bezier_eval(x, cp, order=3):
     bas_x = feta.bernstein_evaluator(x, x*0, x*0, tg1d).T
     return bas_x@cp
 
-
-def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query):
+def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query, regularizer=None):
     """Least Square Fitting for QuadMesh, with Tensor Product Bezier Basis
 
     Args:
@@ -208,8 +207,9 @@ def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query):
     assert F_qh_sample.shape[1] == bsv.shape[0]
 
     all_samples = np.zeros((F_qh_sample.max() + 1, 3))
-    ijk, vals = [], []
-
+    rows, cols, vals = [], [], []
+    bsv = bsv.tocoo()
+    br, bc, bv = bsv.row, bsv.col, bsv.data
     for q, (t0, t1) in enumerate(tqdm.tqdm(q2t)):
         tbc0 = np.array(sample_for_quad_trim(trim_types[t0], trim_types[t1], level),
                         dtype=int)
@@ -218,20 +218,30 @@ def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query):
 
         all_samples[F_qh_sample[q]] = sample_vals
         sample_q, order_q = F_qh_sample[q], F_qh_order[q]
-        for i, si in enumerate(sample_q):
-            for j, sj in enumerate(order_q):
-                ijk.append((si, sj))
-                vals.append(bsv[i, j])
-
-    ijk, idx = np.unique(np.asarray(ijk), axis=0, return_index=True)
-
+        rows = np.concatenate([rows, sample_q[br]])
+        cols = np.concatenate([cols, order_q[bc]])
+        vals = np.concatenate([vals, bv])
+    if regularizer is not None:
+        offset = 0
+        rnum = regularizer.shape[0]
+        regularizer = regularizer.tocoo()
+        r_rows, r_cols, r_vals = regularizer.row, regularizer.col, regularizer.data
+        for q, (t0, t1) in enumerate(tqdm.tqdm(q2t)):
+            order_q = F_qh_order[q]
+            rows = np.concatenate([rows, r_rows + q*rnum])
+            cols = np.concatenate([cols, order_q[r_cols]])
+            vals = np.concatenate([vals, r_vals])
+        print(all_samples.shape)
+        all_samples = np.concatenate([all_samples, np.zeros((rnum*len(q2t),3))])
+        
+    ijk, idx = np.unique(np.vstack([rows, cols]).astype(int), axis=1, return_index=True)
     A = scipy.sparse.csr_matrix(arg1=(np.array(vals)[idx],
-                                      ijk.T))
-
+                                      ijk))
+    assert A.shape[0] == all_samples.shape[0]
     sol = quadratic_minimize(A, all_samples)
-
+    print('Computation Finished')
     all_cp = sol[F_qh_order]
-    return all_cp
+    return all_cp, all_samples
 
 
 def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int, subd = None):
@@ -370,7 +380,10 @@ def constrained_cc_fit(V, F, siblings, newquads, known_cp, level:int, order:int,
         qc = refpts[cc_q[t]].reshape(-1, 1, 2)
         type2bc.append(((level-x)*qc[0] + x*qc[1])*(level-y) +
                        ((level-x)*qc[3] + x*qc[2])*y)
-    for qi, q in enumerate(newquads):
+    rows, cols, vals = [], [], []
+    bsv = bsv.tocoo()
+    br, bc, bv = bsv.row, bsv.col, bsv.data
+    for qi, q in enumerate(tqdm.tqdm(newquads)):
         tbc = np.zeros(((level+1)**2, 4),
                        dtype=int)
         tbc[:, 0] = solos[qi//3]
@@ -380,14 +393,14 @@ def constrained_cc_fit(V, F, siblings, newquads, known_cp, level:int, order:int,
         sample_vals = query(tbc, denom=6*(level)**2)
         all_samples[F_sa[qi]] = sample_vals
         sample_q, order_q = F_sa[qi], F_or[qi]
-        for i, si in enumerate(sample_q):
-            for j, sj in enumerate(order_q):
-                ijk.append((si, sj))
-                vals.append(bsv[i, j])
+        rows = np.concatenate([rows, sample_q[br]])
+        cols = np.concatenate([cols, order_q[bc]])
+        vals = np.concatenate([vals, bv])
 
-    ijk, idx = np.unique(np.asarray(ijk), axis=0, return_index=True)
+    ijk, idx = np.unique(np.vstack([rows, cols]).astype(int), axis=1, return_index=True)
     A = scipy.sparse.csr_matrix(arg1=(np.array(vals)[idx],
-                                      ijk.T))
+                                      ijk))
+
     sol = quadratic_minimize(A, all_samples, (known_ids, known_vals))
     all_cp = sol[F_or]
     return all_cp
