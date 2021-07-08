@@ -5,4 +5,4 @@ __pycache__
 *.log
 *.npz
 *.pyc
-.vscode/
+.vscode/temp/
