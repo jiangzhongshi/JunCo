@@ -80,13 +80,15 @@ def check_stress(v,t,order):
     print(misises.max())
     return p_uni, t_uni, d_uni, misises[indices]
 
+
+
 def load_tetgenio(filename):
-    with open(filename + '.1.ele') as fp:
+    with open(filename + '.ele') as fp:
         tet = np.asarray([list(map(int,l.split())) for l in fp.readlines()[1:] if '#' not in l])
         assert all(tet[:,0] == np.arange(len(tet)))
         tet = tet[:,1:]
 
-    with open(filename + '.1.node') as fp:
+    with open(filename + '.node') as fp:
         verts = np.asarray([list(map(float,l.split())) for l in fp.readlines()[1:] if '#' not in l])
         assert all(verts[:,0] == np.arange(len(verts)))
         verts = verts[:,1:]
