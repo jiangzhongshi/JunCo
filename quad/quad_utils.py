@@ -4,6 +4,7 @@ from collections import defaultdict
 import scipy
 import igl
 
+
 def catmul_clark_split(v,f):
     verts = list(v)
     tt, tti = igl.triangle_triangle_adjacency(f)

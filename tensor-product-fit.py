@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from curve import fem_generator as feta
+from curve import fem_tabulator as feta
 from vis_utils import h5reader, highorder_sv
 from quad import quad_curve_utils as qr
 from quad import quad_utils

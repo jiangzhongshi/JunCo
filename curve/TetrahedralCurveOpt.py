@@ -62,11 +62,11 @@ import meshio
 
 import sys
 sys.path.append('../python')
-from curve import fem_generator
-gmsh_cod = (fem_generator.codecs()['tetra35'][-1]*4).astype(np.int)
-auto_cod = np.array(fem_generator.tuple_gen(order=4, var_n=3))
+from curve import fem_tabulator
+gmsh_cod = (fem_tabulator.codecs()['tetra35'][-1]*4).astype(np.int)
+auto_cod = np.array(fem_tabulator.tuple_gen(order=4, var_n=3))
 reorder = np.lexsort(
-        (auto_cod).T)[fem_generator.invert_permutation(np.lexsort(gmsh_cod.T))]
+        (auto_cod).T)[fem_tabulator.invert_permutation(np.lexsort(gmsh_cod.T))]
 assert np.all((auto_cod)[reorder]== gmsh_cod)
 
 
@@ -178,11 +178,11 @@ meshio.write('/home/zhongshi/public/curved/block_fine.msh',
 # In[ ]:
 
 
-from curve import fem_generator
-gmsh_cod = (fem_generator.codecs()['tetra35'][-1]*4).astype(np.int)
-auto_cod = np.array(fem_generator.tuple_gen(order=4, var_n=3))
+from curve import fem_tabulator
+gmsh_cod = (fem_tabulator.codecs()['tetra35'][-1]*4).astype(np.int)
+auto_cod = np.array(fem_tabulator.tuple_gen(order=4, var_n=3))
 reorder = np.lexsort(
-        (auto_cod).T)[fem_generator.invert_permutation(np.lexsort(gmsh_cod.T))]
+        (auto_cod).T)[fem_tabulator.invert_permutation(np.lexsort(gmsh_cod.T))]
 assert np.all((auto_cod)[reorder]== gmsh_cod)
 
 
@@ -191,7 +191,7 @@ assert np.all((auto_cod)[reorder]== gmsh_cod)
 
 with h5py.File('../buildr/block_fine_autocod.h5','w') as fp:
     fp['lagr'] = mesh.points
-    fp['cells'] = p4T[:,fem_generator.invert_permutation(reorder)]
+    fp['cells'] = p4T[:,fem_tabulator.invert_permutation(reorder)]
 
 
 # In[ ]:

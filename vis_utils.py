@@ -199,14 +199,14 @@ def convert_tri10():
     import sys
     sys.path.append('../python/')
 
-    from curve import fem_generator
-    gmshcod = (fem_generator.codecs()['tri10'][2]*3).astype(np.int)
-    autocod = fem_generator.tuple_gen(order=3,var_n=2)
+    from curve import fem_tabulator
+    gmshcod = (fem_tabulator.codecs()['tri10'][2]*3).astype(np.int)
+    autocod = fem_tabulator.tuple_gen(order=3,var_n=2)
     reorder = np.lexsort(
-                np.array(autocod).T)[fem_generator.invert_permutation(np.lexsort(gmshcod.T))]
+                np.array(autocod).T)[fem_tabulator.invert_permutation(np.lexsort(gmshcod.T))]
     np.all(np.array(autocod)[reorder] == gmshcod)
 
-    tri10info = fem_generator.basis_info(order=3,nsd=2)
+    tri10info = fem_tabulator.basis_info(order=3,nsd=2)
 
     def codec_to_n(co): return [k for i, j in enumerate(co) for k in [i]*j]
 
@@ -327,7 +327,7 @@ def control_points_duplicate_consistent():
             print(v)
 
 def highorder_sv(cp,level=3, order=3):
-    from curve import fem_generator
+    from curve import fem_tabulator
     def local_upsample(level:int):
         usV, usF = igl.upsample(np.eye(3)[:,1:], np.arange(3)[None,:], level)
         bnd0 = igl.boundary_loop(usF)
@@ -337,24 +337,24 @@ def highorder_sv(cp,level=3, order=3):
     if order is None:
         size_to_order = lambda x: int((np.sqrt(x*8+1) - 1)/2) - 1
         order = size_to_order(cp.shape[1])
-    bas_val = fem_generator.bernstein_evaluator(usV[:,0],usV[:,1],usV[:,0]*0,
-                                                fem_generator.tuple_gen(order=order,var_n=2)).T
+    bas_val = fem_tabulator.bernstein_evaluator(usV[:,0],usV[:,1],usV[:,0]*0,
+                                                fem_tabulator.tuple_gen(order=order,var_n=2)).T
     sv = (bas_val@cp)
     return sv, np.vstack([usF+i*len(usV) for i in range(len(sv))]), np.vstack([usE+i*len(usV) for i in range(len(sv))])                  
     
 def reorder_tetra():
     import sys
 
-    from curve import fem_generator
+    from curve import fem_tabulator
 
-    gmsh_cod = (fem_generator.codecs()['tetra35'][-1]*4).astype(np.int)
+    gmsh_cod = (fem_tabulator.codecs()['tetra35'][-1]*4).astype(np.int)
 
-    auto_cod = fem_generator.tuple_gen(order=4, var_n=3)
+    auto_cod = fem_tabulator.tuple_gen(order=4, var_n=3)
 
     reorder = np.lexsort(
-            np.array(auto_cod).T)[fem_generator.invert_permutation(np.lexsort(gmsh_cod.T))]
+            np.array(auto_cod).T)[fem_tabulator.invert_permutation(np.lexsort(gmsh_cod.T))]
 
-    assert np.all(np.array(auto_cod)== gmsh_cod[fem_generator.invert_permutation(reorder)])
+    assert np.all(np.array(auto_cod)== gmsh_cod[fem_tabulator.invert_permutation(reorder)])
 
     import h5py
 
@@ -362,7 +362,7 @@ def reorder_tetra():
 
     with h5py.File('../build_clang/block_msh_autocod.h5', 'w') as fp:
         fp['lagr'] = m.points
-        fp['cells'] = m.cells[0].data[:,fem_generator.invert_permutation(reorder)]
+        fp['cells'] = m.cells[0].data[:,fem_tabulator.invert_permutation(reorder)]
 
 
 def tet_highorder_sv(cp,level=3, order=3):
@@ -379,10 +379,10 @@ def tet_highorder_sv(cp,level=3, order=3):
         #usE = np.vstack([bnd0, np.roll(bnd0, -1)]).T
         return usV, usF, usE
     usV,usF,usE = local_upsample(level=level)
-    #tuples = fem_generator.tuple_gen(order=order, var_n=dim)
-    info = fem_generator.basis_info(order, dim, force_codec='tetra20')
+    #tuples = fem_tabulator.tuple_gen(order=order, var_n=dim)
+    info = fem_tabulator.basis_info(order, dim, force_codec='tetra20')
     l2b = info['l2b']
-    bas_val = fem_generator.bernstein_evaluator(usV[:,0],usV[:,1],usV[:,2], info['codec']).T
+    bas_val = fem_tabulator.bernstein_evaluator(usV[:,0],usV[:,1],usV[:,2], info['codec']).T
     sv = (bas_val@(l2b@cp))
     return sv, np.vstack([usF+i*len(usV) for i in range(len(sv))]), np.vstack([usE+i*len(usV) for i in range(len(sv))])
         

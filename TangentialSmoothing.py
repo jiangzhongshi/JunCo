@@ -11,7 +11,7 @@ from vis_utils import *
 import sys
 sys.path.append('../python')
 from curve import assembler, cubic_fitting
-from curve import fem_generator
+from curve import fem_tabulator
 
 
 # In[149]:

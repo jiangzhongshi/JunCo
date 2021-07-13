@@ -23,22 +23,22 @@ sys.path.append('../python')
 # In[15]:
 
 
-from curve import fem_generator
+from curve import fem_tabulator
 
 
 # In[16]:
 
 
 def convert_tri10(mF, cp, order):
-    gmshcod = (fem_generator.codecs()['tri6'][2]*order).astype(np.int)
-    autocod = fem_generator.tuple_gen(order=order,var_n=2)
+    gmshcod = (fem_tabulator.codecs()['tri6'][2]*order).astype(np.int)
+    autocod = fem_tabulator.tuple_gen(order=order,var_n=2)
     reorder = np.lexsort(
-                np.array(autocod).T)[fem_generator.invert_permutation(np.lexsort(gmshcod.T))]
+                np.array(autocod).T)[fem_tabulator.invert_permutation(np.lexsort(gmshcod.T))]
     #print(reorder)
     #print(autocod, gmshcod)
     assert np.all(np.array(autocod)[reorder] == gmshcod)
 
-    tri10info = fem_generator.basis_info(order=order,nsd=2)
+    tri10info = fem_tabulator.basis_info(order=order,nsd=2)
 
     def codec_to_n(co): return [k for i, j in enumerate(co) for k in [i]*j]
 

@@ -2,9 +2,9 @@
 Some script to generate an example high order sphere.
 """
 if __name__ == "__main__":
-  import fem_generator
+  import fem_tabulator
 else:
-  from . import fem_generator
+  from . import fem_tabulator
 import meshzoo
 import meshio
 import numpy as np
@@ -18,7 +18,7 @@ def sphere_gen(order, ico):
       return meshio.Mesh(points = V, cells = [('triangle',F)])
     el = (order+1)*(order+2)//2
 
-    tri10 = fem_generator.basis_info(order=order, nsd=2, force_codec=f'tri{el}')
+    tri10 = fem_tabulator.basis_info(order=order, nsd=2, force_codec=f'tri{el}')
     pts_o3 = np.array(tri10['codec'])/order
 
     cod_n = np.array([codec_to_n(c) for c in tri10['codec']])

@@ -24,7 +24,7 @@ mV, mF,refV, cp,refF,inpV = h5reader('../tests/data/bichon/microstructure.obj.h5
 # In[3]:
 
 
-from curve import fem_generator
+from curve import fem_tabulator
 
 
 # In[37]:
@@ -63,7 +63,7 @@ colors = np.array(colors)
 # In[4]:
 
 
-tri_o3 = fem_generator.tuple_gen(order=3, var_n=2)
+tri_o3 = fem_tabulator.tuple_gen(order=3, var_n=2)
 
 
 # In[5]:

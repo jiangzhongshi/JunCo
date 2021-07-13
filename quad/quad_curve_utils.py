@@ -1,10 +1,11 @@
-from curve import fem_generator as feta
+from curve import fem_tabulator as feta
 import osqp
 import numpy as np
-from curve import fem_generator as fetaa
+from curve import fem_tabulator as fetaa
 import igl
 import scipy
 import tqdm
+from sksparse.cholmod import cholesky_AAt
 
 ref_quad = np.array([[0, 0], [1, 0], [1, 1], [0, 1.]])
 
@@ -12,7 +13,7 @@ ref_quad = np.array([[0, 0], [1, 0], [1, 1], [0, 1.]])
 def quadratic_minimize(A, b, known=None):
     if known is None:
         if scipy.sparse.issparse(A):
-            return scipy.sparse.linalg.spsolve(A.T@A, A.T@b)
+            return cholesky_AAt(A.T)(A.T@b)
         else:
             return scipy.linalg.solve(A.T@A, A.T@b)
     kid, kval = known
@@ -247,7 +248,7 @@ def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query, regularizer
 def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int, subd = None):
     """Catmul-Clark style split for the solo triangles.
     
-    Default, use Bezier subdivision algorithm to assign for the subsequent constraints.
+    Default, use de Casteljau (or de Boor) subdivision algorithm to assign for the subsequent constraints.
     Returns information for constrained nodes and more.
     Args:
         V (np.array): TriMesh Vertices

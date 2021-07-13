@@ -15,15 +15,15 @@ import sys
 
 sys.path.append('../python')
 
-from curve import fem_generator
+from curve import fem_tabulator
 
 
 # In[4]:
 
 
 # Gather cods
-tri_o4 = fem_generator.tuple_gen(order=4, var_n=2)
-tet_o4 = fem_generator.tuple_gen(order=4, var_n=3)
+tri_o4 = fem_tabulator.tuple_gen(order=4, var_n=2)
+tet_o4 = fem_tabulator.tuple_gen(order=4, var_n=3)
 def codec_to_n(co): return [k for i, j in enumerate(co) for k in [i]*j]
 tri_o4_n = np.array([codec_to_n(c) for c in tri_o4])
 tet_o4_n = np.array([codec_to_n(c) for c in tet_o4])
@@ -124,7 +124,7 @@ p4F1 = np.array([tup2node[tuple(sorted(f))] for f in Fbnd[comp_f][:,tri_o4_n].re
 # In[127]:
 
 
-tri4_info = fem_generator.basis_info(order=4,nsd=2)
+tri4_info = fem_tabulator.basis_info(order=4,nsd=2)
 
 
 # In[128]:

@@ -12,7 +12,7 @@ import h5py
 
 import sys
 sys.path.append('../python')
-from curve import fem_generator
+from curve import fem_tabulator
 
 
 # In[4]:
@@ -44,9 +44,9 @@ u, v = usV[:, :1], usV[:, 1:]
 
 
 for order in range(1,3):
-    tri_o = fem_generator.basis_info(order=order, nsd=2, derivative=True)
+    tri_o = fem_tabulator.basis_info(order=order, nsd=2, derivative=True)
     basis = tri_o['basis']
-    tri_o1 = fem_generator.basis_info(order=order+1, nsd=2, derivative=False)
+    tri_o1 = fem_tabulator.basis_info(order=order+1, nsd=2, derivative=False)
     cod_o1 = tri_o1['codec']
 
     values_at_nodes = np.hstack(basis(u, v)).T
@@ -73,7 +73,7 @@ sample_pts = np.asarray(list(filter(lambda x: sum(x) == N, itertools.product(ran
 
 
 for order in range(2,5):
-    tet_o = fem_generator.basis_info(order=order+1, nsd=3, derivative=True)
+    tet_o = fem_tabulator.basis_info(order=order+1, nsd=3, derivative=True)
     bern_from_lag = tet_o['l2b']
     with h5py.File(f'../python/curve/data/p{order+1}_quniform5_dxyz.h5','w') as f: 
         f['dxyz'] = np.array([[f(*p) for p in sample_pts] for f in tet_o['basis_d']])@bern_from_lag
