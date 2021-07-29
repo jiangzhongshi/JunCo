@@ -9,7 +9,6 @@ from sksparse.cholmod import cholesky_AAt
 
 ref_quad = np.array([[0, 0], [1, 0], [1, 1], [0, 1.]])
 
-
 def quadratic_minimize(A, b, known=None):
     if known is None:
         if scipy.sparse.issparse(A):
@@ -116,7 +115,12 @@ def sample_for_quad_trim(tr0, tr1, order: int):
 sample_for_quad_trim.cache = dict()
 
 
-def standard_codec_list(level: int):
+def local_codecs_on_edge(level: int):
+    """List of codecs (partial) to resolve duplicates on edges for quads.
+
+    Args:
+        level (int): number of points on the side. (order + 1)
+    """
     std_x, std_y = quad_tuple_gen(level).T
     codes = []
     for (x, y) in zip(std_x, std_y):
@@ -124,10 +128,8 @@ def standard_codec_list(level: int):
             bc = [level - x, x, level - y, y]
             zid = bc.index(0)
             side = [[1, 2], [0, 3], [3, 2], [0, 1]][zid]
-#             print(bc,zid,end=' ')
             bc = bc[2:] if zid <= 1 else bc[:2]
             code = tuple(side[:1]*bc[0] + side[1:]*bc[1])
-#             print('/',x,y,code)
             codes.append(code)
         else:
             codes.append(tuple([-1]*level))
@@ -135,7 +137,7 @@ def standard_codec_list(level: int):
 
 
 def quad_ho_F(quads, level: int):
-    std_cod = standard_codec_list(level)
+    std_cod = local_codecs_on_edge(level)
 
     global_ids = np.zeros((len(quads), len(std_cod)), dtype=int)
     global_id_store = dict()
@@ -193,7 +195,7 @@ def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query, regularizer
         V ([type]): [description]
         F ([type]): [description]
         quads ([type]): [description]
-        q2t ([type]): [description]
+        q2t ([type]): Qx2, two triangles it points to
         trim_types (npt.Array): used for converting quad parameter values to triangle and barycentric coordinates.
         level ([type]): levels for upsample
         order ([type]): [description]
@@ -211,7 +213,7 @@ def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query, regularizer
     rows, cols, vals = [], [], []
     bsv = bsv.tocoo()
     br, bc, bv = bsv.row, bsv.col, bsv.data
-    for q, (t0, t1) in enumerate(tqdm.tqdm(q2t)):
+    for q, (t0, t1) in enumerate(tqdm.tqdm(q2t, desc='Quad Fit')):
         tbc0 = np.array(sample_for_quad_trim(trim_types[t0], trim_types[t1], level),
                         dtype=int)
         tbc0[:, 0] = np.asarray([t0, t1])[tbc0[:, 0]]
@@ -253,11 +255,11 @@ def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int, subd = None):
     Args:
         V (np.array): TriMesh Vertices
         F (np.array): TriMesh Faces
-        siblings ([type]): tris to sibling tris indices, only used -1 indicator here.
+        siblings (np.array): tris to sibling tris indices, only used -1 indicator here.
         t2q ([type]): tris to quad indices.
         quads ([type]): quad F matrix
         q_cp ([type]): control points for the existing quads.
-        order (int): Polynomial order
+        order (int): Polynomial order for the quad before the split.
 
     Returns:
         known_cp: a map from tuples to control points. Used for subsequent fitting.
@@ -269,10 +271,12 @@ def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int, subd = None):
     TT, TTi = igl.triangle_triangle_adjacency(F)
 
     edge_node_map = {tuple(sorted(k)): i
-                     for i, k in enumerate(standard_codec_list(order))}
+                     for i, k in enumerate(local_codecs_on_edge(order))}
     edge_id = - np.ones_like(TT)
     avail_id = F.max() + 1
     known_cod2cp = dict()
+
+    ## CC split to quads, while recording known_cod2cp
     newverts = []
     for f in solos:
         for e in range(3):
@@ -284,23 +288,21 @@ def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int, subd = None):
                 avail_id += 1
                 continue
             qid = t2q[fo]
-            if qid < 0:  # not a quad, this would be activated later
+            if qid < 0:  # opposite is not an existing quad
                 if edge_id[f, e] < 0:
                     edge_id[f, e] = edge_id[fo, eo] = avail_id
                     newverts.append((V[v0]+V[v1])/2)
                     avail_id += 1
-                continue
+                continue # simply register the available vertex without considering known_cod2cp assignments
             assert edge_id[f, e] < 0, "Could not have visited twice."
-            quad = list(quads[qid])
 
+            quad = list(quads[qid])
             qv0, qv1 = [quad.index(v0), quad.index(v1)]
             # collect on this edge
-            tup1d = np.array([order - np.arange(order + 1),
-                              np.arange(order + 1)]).T
 
-            tup_list = [tuple(sorted([qv0]*t0 + [qv1]*t1)) for t0, t1 in tup1d]
+            tup_list = [tuple(sorted([qv0]*(order - t1) + [qv1]*t1)) for t0, t1 in range(order+1)]
             cp_list = np.asarray([q_cp[qid][edge_node_map[t]]
-                                  for t in tup_list])
+                                  for t in tup_list]) # Bezier control points of the original edge
             cp0, cp1 = subd(cp_list)
             for i, (t0, t1) in enumerate(tup1d):
                 known_cod2cp[tuple(sorted([v0]*t0 + [avail_id]*t1))] = cp0[i]
@@ -315,6 +317,7 @@ def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int, subd = None):
         for ei in range(3):
             v0, e0, e2 = F[fi, ei], edge_id[fi, ei], edge_id[fi, (ei+2) % 3]
             newquads += [[v0, e0, pid, e2]]
+    
     assert np.asarray(newquads).max() + 1 == avail_id + len(solos)
     return (np.concatenate([newverts, igl.barycenter(V, F[solos])]),
             known_cod2cp, newquads)
@@ -343,9 +346,9 @@ def constrained_cc_fit(V, F, siblings, newquads, known_cp, level:int, order:int,
     F_sa = quad_ho_F(newquads, level=level)
     F_or = quad_ho_F(newquads, level=order)
 
-    std_codec = standard_codec_list(order)
-    known_dict = dict()
-    for q, quad in enumerate(tqdm.tqdm(newquads)):
+    std_codec = local_codecs_on_edge(order)
+    known_dict = dict() # relates xid in the system to the known control value.
+    for q, quad in enumerate(tqdm.tqdm(newquads, desc='Constrained CC')):
         for e, code in enumerate(std_codec):
             if code[0] < 0:
                 continue
@@ -358,12 +361,14 @@ def constrained_cc_fit(V, F, siblings, newquads, known_cp, level:int, order:int,
 
     known_ids = np.ones(len(known_dict), dtype=int)
     known_vals = np.ones((len(known_dict), 3))
-    for i, (k, v) in enumerate(known_dict.items()):
+    for i, (k, v) in enumerate(sorted(known_dict.items())):
         known_ids[i], known_vals[i] = k, v
 
     all_samples = np.zeros((F_sa.max() + 1, 3))
     ijk, vals = [], []
 
+    # hardcoded pattern for catmull-clark
+    # used to warp the query barycentric coordinates.
     refpts = np.array([[0, 0],
                        [3, 0],
                        [6, 0],

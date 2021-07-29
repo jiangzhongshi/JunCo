@@ -1,9 +1,6 @@
 import numpy as np
 import igl
-import meshplot as mp
 import h5py
-import plotly.graph_objects as go
-import pythreejs as p3s
 import scipy
 
 ########################## Mesh ###################
@@ -387,6 +384,16 @@ def tet_highorder_sv(cp,level=3, order=3):
     return sv, np.vstack([usF+i*len(usV) for i in range(len(sv))]), np.vstack([usE+i*len(usV) for i in range(len(sv))])
         
 ############### MeshZoo #####################
+
+def split_square(width):
+    x,y = np.meshgrid(np.arange(width+1), np.arange(width+1))
+    tr = lambda i,j:i+(width+1)*j
+    tris= []
+    for i in range(width):
+        for j in range(width):
+            tris += [[tr(i,j), tr(i+1,j), tr(i+1,j+1)], [tr(i,j), tr(i+1,j+1), tr(i,j+1)]]
+    return np.vstack([x.flatten(), y.flatten()]).T, np.array(tris)
+
 def corner_to_cube(c0, c1):
     mi, ma = np.minimum(c0,c1), np.maximum(c0,c1)
     pts = np.array([[mi[i] if tup[i] else ma[i] for i in range(3)]
