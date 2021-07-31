@@ -205,3 +205,9 @@ def split_edges_between_odd_components(f, cp):
     for i,j, path in odd_pairing:
         split_pairs += [tuple(sorted(i)) for i in zip(path[:-1], path[1:])]
     return [next(iter(arr[s])) for s in split_pairs]
+
+
+def edge_dots(V, F):
+    FN  = igl.per_face_normals(V,F, np.ones(3))
+    tt, tti = igl.triangle_triangle_adjacency(F)
+    return np.einsum('fad,fd->fa',FN[tt],FN)

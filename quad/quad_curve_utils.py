@@ -335,7 +335,7 @@ def constrained_cc_fit(V, F, siblings, newquads, known_cp, level:int, order:int,
         level (int): Sampling level for least squares.
         order (int): Curved Order
         bsv ([type]): [description]
-        query ([type]): [description]
+        query ([type]): lambda funuction, takes (tri_bc, a denominator scalar) returns sampled points.
 
     Returns:
         [type]: [description]
@@ -410,3 +410,39 @@ def constrained_cc_fit(V, F, siblings, newquads, known_cp, level:int, order:int,
     sol = quadratic_minimize(A, all_samples, (known_ids, known_vals))
     all_cp = sol[F_or]
     return all_cp
+
+def query(t_bc_i, denom):
+    # requires additional input of (mB,mT,F,aabb(refV,refF))
+    all_f = query.F[t_bc_i[:,0]]
+    base_pts = np.einsum('sed,se->sd', query.mB[all_f], t_bc_i[:,1:])/denom
+    top_pts = np.einsum('sed,se->sd', query.mT[all_f], t_bc_i[:,1:])/denom
+    list_fid = np.zeros(len(base_pts),dtype=int)
+    list_bc = np.zeros((len(base_pts),3))
+    for i, (b,t) in enumerate(zip(base_pts, top_pts)):
+        list_fid[i], u,v, _ = query.aabb.segment_hit(b,t, False)
+        list_bc[i] = (1-u-v,u,v)
+    return np.einsum('sed,se->sd', query.inpV[query.refF[list_fid]], list_bc)
+
+
+
+def split_square(width):
+    x,y = quad_tuple_gen(width).T#np.meshgrid(np.arange(width+1), np.arange(width+1))
+    tr = lambda i,j: np.ravel_multi_index((i,j), dims=(width+1,width+1))
+    tris= []
+    for i in range(width):
+        for j in range(width):
+            tris += [[tr(i,j), tr(i+1,j), tr(i,j+1)], [tr(i+1,j),tr(i+1,j+1), tr(i,j+1)]]
+    return np.vstack([x.flatten(), y.flatten()]).T, np.array(tris)
+
+def top_and_bottom_sample(mB, mT, F, quads, q2t, trim_types, level):
+    all_base = np.zeros((len(quads), (level+1)**2, 3))
+    all_top = np.zeros((len(quads), (level+1)**2, 3))
+
+    for q, (t0, t1) in enumerate(q2t):
+        tbc0 = np.array(sample_for_quad_trim(trim_types[t0], trim_types[t1], level),
+                        dtype=int)
+        tbc0[:, 0] = np.asarray([t0, t1])[tbc0[:, 0]]
+        all_base[q]= (np.einsum('fed,fe->fd',mB[F[tbc0[:, 0]]], tbc0[:,1:])/level)
+        all_top[q] = (np.einsum('fed,fe->fd',mT[F[tbc0[:, 0]]], tbc0[:,1:])/level)
+        
+    return np.array(all_base), np.array(all_top)
