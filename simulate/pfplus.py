@@ -30,8 +30,7 @@ def main(input_file):
     with tempfile.NamedTemporaryFile(mode='r+', suffix='.json') as fp:
         fp.write(json.dumps(d))
         fp.seek(0)
-        subprocess.run(['/home/zhongshi/Workspace/polyfem/build/PolyFEM_bin', '--cmd', '--json', fp.name],
-        env = {'OMP_NUM_THREADS': '1'})
+        subprocess.run(['/home/zhongshi/Workspace/polyfem/build/PolyFEM_bin', '--cmd', '--json', fp.name], env = {'OMP_NUM_THREADS': '1'})
 
 if __name__ == '__main__':
     import fire

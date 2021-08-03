@@ -19,7 +19,7 @@ def tube(length: float = 1.0, radius: float = 1.0, n: int = 30, nw : int = -1):
 
     # Generate suitable ranges for parametrization
     u_range = np.linspace(0.0, 2 * np.pi, num=n, endpoint=False)
-    v_range = np.linspace(-0.5 * length, 0.5 * length, num=nw)
+    v_range = np.linspace(0 * length, 1 * length, num=nw)
 
     # Create the vertices.
     proto_nodes = np.dstack(np.meshgrid(u_range, v_range, indexing="ij")).reshape(-1, 2)
@@ -49,11 +49,11 @@ def shell_gen(n, nw):
     base, f_b = tube(length=16.0, radius=0.9, n=n, nw = nw)
     top, f_t = tube(length=16.0, radius=1.0, n=n, nw = nw)
     v, t = tetmesh_from_shell(base, top, f_b)
-    v -= v.min(axis=0)
-    v/= v.max()
+    v /= 16.0
+    print(n,nw, t.shape)
     meshio.write(f'simulate/data/tube_{n}_{nw}.msh', meshio.Mesh(points = v, cells = [('tetra', t)]))
 
 if __name__ == '__main__':
-    for n in [5,10,20,30,40]:
-        for nw in [5,10,20,30,40]:
+    for n in [40]:
+        for nw in [60,80,100,150, 200,300]:
             shell_gen(n, nw)
