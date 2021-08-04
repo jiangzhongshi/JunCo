@@ -6,6 +6,8 @@ import scipy
 import scipy.sparse
 import collections
 import tqdm
+from curve import fem_tabulator as feta
+import igl
 
 
 def evaluator(x, table):
@@ -30,10 +32,10 @@ def splitter(width):
 
 
 def subd(coef):
-	print(coef.shape)
-	assert False, "TODO: concile width and coef"
-	if subd.A is None:
-		subd.A, subd.A1, subd.A2, subd.denom = splitter(width)
+    print(coef.shape)
+    assert False, "TODO: concile width and coef"
+    if subd.A is None:
+        subd.A, subd.A1, subd.A2, subd.denom = splitter(width)
     c1 = np.linalg.solve(subd.A, subd.A1@coef)
     c2 = np.linalg.solve(subd.A, subd.A2@coef)
     return c1,c2
@@ -47,13 +49,13 @@ def basis_row(x, table, du=0, dv=0):
     cols = (np.expand_dims(iu, 2) * dim + np.expand_dims(iv, 1)).flatten()
     rows = np.arange(iu.shape[0])[:, None].repeat(iu.shape[1]*iv.shape[1], axis=1).flatten()
     return rows, cols, outer
-	
+    
 def bspline_fitting_matrix(width, level, num_reg=0.):
-	"""
-	Generate the matrix for bspline fitting.
-	replicating _global_basis_row from `cubic_spline.py`
-	"""
-	X = np.array(qr.quad_tuple_gen(level))
+    """
+    Generate the matrix for bspline fitting.
+    replicating _global_basis_row from `cubic_spline.py`
+    """
+    X = np.array(qr.quad_tuple_gen(level))
     table = np.asarray(csp.table_1d(width))    
     dim = width+3
     rows, cols, outer = basis_row(X/level*width, table)
@@ -81,54 +83,10 @@ def bspline_fitting_matrix(width, level, num_reg=0.):
 
     return A, reg_mat
 
-def control_points_for_quad_edges(quads, valid, q_cp) -> dict:
-    """
-	Based on valid, get the control points on the border and store to a dictionary
-    """
-    assert len(q_cp) == len(quads)
-    assert len(quads) == len(valid)
-    known_cp = dict()
-    order = np.round(np.sqrt(q_cp.shape[1])).astype(int) - 1
-    
-    edge_node_map = {tuple(sorted(k)): i
-                     for i, k in enumerate(qr.local_codecs_on_edge(order))}
-    # Collect some edges.
-    quad_connect = collections.defaultdict(lambda:[None,None])
-    for q, _ in enumerate(quads):
-        # print(q)
-        if not valid[q]:
-            continue
-        for e in range(4):
-            v0, v1 = quads[q,e], quads[q,(e+1)%4]
-            ind = 0
-            if v0 > v1:
-                v0,v1 = v1,v0
-                ind = 1
-            quad_connect[v0,v1][ind] = q
-    for (v0,v1), (q0,q1) in quad_connect.items():
-        if (q0 is not None) and (q1 is not None):
-            continue
-        if q0 is None:
-            v0, v1 = v1, v0
-            q0, q1 = q1, q0
-        assert q0 is not None # readout v0,v1
-        quad = list(quads[q0])
-#         print(q0,)
-        qv0, qv1 = [quad.index(v0), quad.index(v1)]
-        tup1d = np.array([order - np.arange(order + 1),
-                          np.arange(order + 1)]).T
-
-        tup_list = [tuple(sorted([qv0]*t0 + [qv1]*t1)) for t0, t1 in tup1d]
-        cp_list = np.asarray([q_cp[q0][edge_node_map[t]]
-                              for t in tup_list])
-        known_cp[(v1,v0)] = cp_list[::-1]
-    return known_cp
-
-
 def constrained_ho_fit(quads, valid, q_cp, q2t,trim_types, known_cp, width:int, level:int, bsv, query):
-	"""
-	Constrained High Order Elevated fitting, for invalid quads.
-	"""
+    """
+    Constrained High Order Elevated fitting, for invalid quads.
+    """
     order = 2*width + 2
 
     assert level >= order
@@ -230,21 +188,21 @@ def bsp_sv(cp, level, width, debug=False):
 
 
 def check_validity(mB,mT,F, quads, q2t, trim_types, quad_cp, width):
-	"""Check inversions
+    """Check inversions
 
-	Args:
-		mB ([type]): [description]
-		mT ([type]): [description]
-		F ([type]): [description]
-		quads ([type]): [description]
-		q2t ([type]): [description]
-		trim_types ([type]): [description]
-		quad_cp ([type]): [description]
-		width ([type]): [description]
+    Args:
+        mB ([type]): [description]
+        mT ([type]): [description]
+        F ([type]): [description]
+        quads ([type]): [description]
+        q2t ([type]): [description]
+        trim_types ([type]): [description]
+        quad_cp ([type]): [description]
+        width ([type]): [description]
 
-	Returns:
-		[type]: [description]
-	"""
+    Returns:
+        [type]: [description]
+    """
     all_b, all_t = qr.top_and_bottom_sample(mB,mT, F, quads, q2t, trim_types, level=width)
     v4, f4 = qr.split_square(width)
     tup = feta.tuple_gen(order=4, var_n=2) # use cubic + 1 for tetrahedra

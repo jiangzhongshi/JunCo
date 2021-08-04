@@ -446,3 +446,47 @@ def top_and_bottom_sample(mB, mT, F, quads, q2t, trim_types, level):
         all_top[q] = (np.einsum('fed,fe->fd',mT[F[tbc0[:, 0]]], tbc0[:,1:])/level)
         
     return np.array(all_base), np.array(all_top)
+
+import collections
+def control_points_for_quad_edges(quads, valid, q_cp) -> dict:
+    """
+    Based on valid, get the control points on the border and store to a dictionary
+    """
+    assert len(q_cp) == len(quads)
+    assert len(quads) == len(valid)
+    known_cp = dict()
+    order = np.round(np.sqrt(q_cp.shape[1])).astype(int) - 1
+    
+    edge_node_map = {tuple(sorted(k)): i
+                     for i, k in enumerate(local_codecs_on_edge(order))}
+    # Collect some edges.
+    quad_connect = collections.defaultdict(lambda:[None,None])
+    for q, _ in enumerate(quads):
+        # print(q)
+        if not valid[q]:
+            continue
+        for e in range(4):
+            v0, v1 = quads[q,e], quads[q,(e+1)%4]
+            ind = 0
+            if v0 > v1:
+                v0,v1 = v1,v0
+                ind = 1
+            quad_connect[v0,v1][ind] = q
+    for (v0,v1), (q0,q1) in quad_connect.items():
+        if (q0 is not None) and (q1 is not None):
+            continue
+        if q0 is None:
+            v0, v1 = v1, v0
+            q0, q1 = q1, q0
+        assert q0 is not None # readout v0,v1
+        quad = list(quads[q0])
+        qv0, qv1 = [quad.index(v0), quad.index(v1)]
+        tup1d = np.array([order - np.arange(order + 1),
+                          np.arange(order + 1)]).T
+
+        tup_list = [tuple(sorted([qv0]*t0 + [qv1]*t1)) for t0, t1 in tup1d]
+        cp_list = np.asarray([q_cp[q0][edge_node_map[t]]
+                              for t in tup_list])
+        known_cp[(v1,v0)] = cp_list[::-1]
+    return known_cp
+
