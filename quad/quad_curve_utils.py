@@ -28,6 +28,19 @@ def quadratic_minimize(A, b, known=None):
                                                rhs[mask == 0] - Lik@kval)
     return x
 
+def combine_tris(face_i, face_s):
+    fi, fs = set(face_i), set(face_s)
+    common = fi & fs
+    assert len(common) == 2
+    id_list = list(face_i) + list(fs-common)
+    tid = list(face_i).index(list(fi-common)[0])
+    permute = ([[0, 1, 3, 2], [0, 1, 2, 3], [0, 3, 1, 2]])[tid]
+    q = np.array(id_list)[permute]
+
+    id_map = {k: m for m, k in enumerate(q)}
+    trim = [id_map[k] for k in face_i], [id_map[k] for k in face_s]
+    assert np.sum(q[trim[0]] - face_i) == 0
+    return q, trim
 
 def quad_trim_assign(siblings, faces):
     quad_assign = - np.ones(len(faces), dtype=int)
@@ -41,19 +54,9 @@ def quad_trim_assign(siblings, faces):
         if quad_assign[i] >= 0:
             assert quad_assign[s] >= 0
             continue
-        fi, fs = set(faces[i]), set(faces[s])
-        common = fi & fs
-        assert len(common) == 2
-
-        id_list = list(faces[i]) + list(fs-common)
-        tid = list(faces[i]).index(list(fi-common)[0])
-        permute = ([[0, 1, 3, 2], [0, 1, 2, 3], [0, 3, 1, 2]])[tid]
-        q = np.array(id_list)[permute]
-
-        id_map = {k: m for m, k in enumerate(q)}
-        for ii in [i, s]:
-            trimmers[ii] = [id_map[k] for k in faces[ii]]
-        assert np.sum(q[trimmers[i]] - faces[i]) == 0
+        q, trims = combine_tris(faces[i], faces[s])
+        
+        trimmers[[i,s]] = trims
         quads.append(q)
         quad_assign[i] = quad_assign[s] = cnt
         cnt += 1
@@ -242,7 +245,6 @@ def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query, regularizer
                                       ijk))
     assert A.shape[0] == all_samples.shape[0]
     sol = quadratic_minimize(A, all_samples)
-    print('Computation Finished')
     all_cp = sol[F_qh_order]
     return all_cp, all_samples
 
@@ -300,13 +302,14 @@ def solo_cc_split(V, F, siblings, t2q, quads, q_cp, order: int, subd = None):
             qv0, qv1 = [quad.index(v0), quad.index(v1)]
             # collect on this edge
 
-            tup_list = [tuple(sorted([qv0]*(order - t1) + [qv1]*t1)) for t0, t1 in range(order+1)]
+            tup_list = [tuple(sorted([qv0]*(order - t1) + [qv1]*t1)) for t1 in range(order+1)]
             cp_list = np.asarray([q_cp[qid][edge_node_map[t]]
                                   for t in tup_list]) # Bezier control points of the original edge
             cp0, cp1 = subd(cp_list)
-            for i, (t0, t1) in enumerate(tup1d):
-                known_cod2cp[tuple(sorted([v0]*t0 + [avail_id]*t1))] = cp0[i]
-                known_cod2cp[tuple(sorted([avail_id]*t0 + [v1]*t1))] = cp1[i]
+            for t1 in range(order + 1):
+                t0 = order - t1
+                known_cod2cp[tuple(sorted([v0]*t0 + [avail_id]*t1))] = cp0[t1]
+                known_cod2cp[tuple(sorted([avail_id]*t0 + [v1]*t1))] = cp1[t1]
 
             edge_id[f, e] = avail_id
             newverts.append((V[v0]+V[v1])/2)

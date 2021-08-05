@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # coding: utf-8
-
 from curve import fem_tabulator as feta
 from vis_utils import h5reader, highorder_sv
 from quad import quad_curve_utils as qr
@@ -8,40 +7,130 @@ from quad import quad_utils
 import meshplot as mp
 import numpy as np
 import igl
+import sys
+sys.path.append('/home/zhongshi/Workspace/bichon/python/debug')
+import prism
+from spline import cubic_spline as csp
+import scipy
+import plotly.graph_objects as go
 
-def eval_bc(verts, faces, bc_i, denom:int):
-    vf = (verts[faces[bc_i[:,0]]])
-    return np.einsum('sed,se->sd', vf, bc_i[:,1:])/denom
-def simple_query(p):
-    x, y = p[:,0], p[:,1]
-    return np.vstack([x,y,x**2]).T
+from meshplotplus.plot import scale, use_scale
 
-def bezier_fit_matrix(order : int, level : int) -> np.ndarray:
-    std_x, std_y = qr.quad_tuple_gen(level).T
-    bsv = qr.tp_sample_value(std_x/level, std_y/level, order=order)
-    bsv = bsv.reshape(len(bsv),-1)
-    return bsv
+from vis_utils import highorder_sv
+
+import quad.bezier as qb
+
+import tqdm
+def bezier_check_validity(mB,mT,F, quads, q2t, trim_types, quad_cp, order, progress_bar = True):
+    all_b, all_t = qr.top_and_bottom_sample(mB,mT, F, quads, q2t, trim_types, level=1)
+    v4, f4 = qr.split_square(1)
+
+    tup = feta.tuple_gen(order = order + 1, var_n=2) # elevated one order for quartic tetrahedra
+    grids = np.einsum('fed,Ee->fEd', v4[f4], np.asarray(tup))
+    
+    grid_ids = np.ravel_multi_index(grids.reshape(-1,2).T, dims = (order + 2, 
+                                                                   order + 2)).reshape(len(f4), -1)
+    valid_quad = np.ones(len(quad_cp), dtype=bool)
+    
+    A13 = qb.bezier_fit_matrix(order, order+1)
+    if progress_bar: 
+        pbar = tqdm.tqdm(quad_cp, desc='Bezier Quads Checking validity')
+    else:
+        pbar = quad_cp
+    for q,qcp in enumerate(pbar):
+        lagr = A13@qcp
+        for t,g in zip(f4, grid_ids):
+            if not (prism.elevated_positive_check(all_b[q][t], all_t[q][t], 
+                                                  lagr[g], True)):
+                valid_quad[q] = False
+                break
+    return valid_quad
+
+def valid_pairing(faces, score, sharp_markers, valid_combine_func):
+    tt, tti = igl.triangle_triangle_adjacency(faces)
+    occupied = -np.ones(len(faces),dtype=int)
+    qid = 0
+    pairs = []
+    queue = []
+    for fi in range(len(faces)):
+        for e in range(3):
+            if sharp_markers[fi,e]:
+                continue
+            queue.append((score(fi,e), fi,e))
+    queue = sorted(queue)
+    for _, fi,e in queue:
+        if occupied[fi] >= 0:
+            continue
+        fo = tt[fi,e]
+        
+        if fo < 0:
+            continue
+        if occupied[fo] >= 0:
+            continue
+
+        if not valid_combine_func(fi, fo): # combine fi with fo.
+            continue
+
+        occupied[fi] = fo
+        occupied[fo] = fi
+        # q = list(faces[fi])
+        # q.insert(e+1, faces[fo][tti[fi,e]-1])
+        # pairs.append(q)
+        qid += 1
+    return occupied, pairs
+
 
 def main():
-    V,F = igl.read_triangle_mesh('/home/zhongshi/Workspace/libigl/tutorial/data/planexy.off')
-    V = simple_query(V)
-    def score(f,e):
-        return - np.linalg.norm(V[F[f,e]] - V[F[f,(e+1)%3]]) # long edges are diffse first
-    siblings, quads = quad_utils.greedy_pairing(F, score=score)
+    V,F,refV,refF,inpV,mB,mT = h5reader('/home/zhongshi/ntopo/ntopmodels/robotarm_with_passive_tetwild_refined.obj.h5',
+                                            'mV','mF','ref.V','ref.F','inpV','mbase','mtop')
+
+    ## Bezier fitting
+    level = 6
+    order = 3
+    A = scipy.sparse.coo_matrix(qb.bezier_fit_matrix(order, level))
+    query = qr.query
+    query.aabb, query.F, query.mB, query.mT, query.inpV, query.refF = prism.AABB(refV, refF), F, mB, mT, inpV, refF
+
+    def valid_combine_func(fi, fo) -> bool:
+        # First fit
+        quad, trims = qr.combine_tris(F[fi], F[fo])
+        tbc0 = np.array(qr.sample_for_quad_trim(trims[0], trims[1], level),
+                        dtype=int)
+        tbc0[:, 0] = np.asarray([fi, fo])[tbc0[:, 0]]
+        sample_vals = query(tbc0, denom=level)
+        local_cp = qr.quadratic_minimize(A, sample_vals)
+        # Second, check
+        v = bezier_check_validity(mB, mT, F[[fi,fo]], quad.reshape(-1,4), np.array([[0,1]]), 
+                                 trims, np.array([local_cp]), order,
+                                progress_bar=False)
+
+        return v
+    siblings, _ = valid_pairing(F, score = lambda f,e: -np.linalg.norm(V[F[f,e]] - V[F[f,(e+1)%3]]), 
+                                                sharp_markers=quad_utils.edge_dots(V,F) < np.cos(np.pi/4),
+                                                valid_combine_func=valid_combine_func)
+    print('empty siblings', np.count_nonzero(siblings == -1), '/', len(siblings))
     t2q, q2t,trim_types, quads = qr.quad_trim_assign(siblings, F)
 
-    level = 5
-    order = 3
-    bsv = bezier_fit_matrix(order, level)
-    def query(t_bc_i, denom):
-        pts = eval_bc(V, F, t_bc_i, denom=level)
-        return simple_query(pts)
 
-    quad_cp = qr.quad_fit(V,F,quads, q2t, trim_types, level, order, bsv, query)
-    if siblings.min() >= 0:
-        print('Perfect Match')
-        return quad_cp, None
+    quad_cp, samples = qr.quad_fit(V, F, quads, q2t, trim_types, level, order, A, query, None)
+
+    valids = bezier_check_validity(mB, mT, F,quads, q2t, trim_types, quad_cp, 3)
+
+    print('valids', np.count_nonzero(valids), '/', len(valids))
+    # adjust quads, quads_cp, q2t, t2q based on validity
+    siblings[q2t[valids==False].flatten()] = -1
+    quads = quads[valids]
+    quad_cp = quad_cp[valids]
+    q2t = q2t[valids]
+    t2q = np.ones_like(t2q) * -1
+    for q, (t0,t1) in enumerate(q2t):
+        t2q[t0] = q
+        t2q[t1] = q
     
-    new_v, known_cp, newquads = qr.solo_cc_split(V, F, siblings, t2q, quads, quad_cp, level, order)
-    cc_cp = qr.constrained_cc_fit(V, F, siblings, newquads, known_cp, level, order, bsv, query)
+    new_v, known_cp, newquads = qr.solo_cc_split(V, F, siblings, t2q, quads, quad_cp, order, subd=None)
+    cc_cp = qr.constrained_cc_fit(V, F, siblings, newquads, known_cp, level, order, A, query)
     return quad_cp, cc_cp
+
+if __name__ == '__main__':
+    q,c = main()
+    np.savez('temp.npz', q=np.array((q,c), dtype=object))

@@ -22,6 +22,8 @@ def main(input_file):
              problem='GenericTensor',
              tensor_formulation = "NeoHookean",
              problem_params = bc_params,
+             line_search='bisection',
+             solver_params = dict(nl_iterations=300),
              export = export_params,
              boundary_sidesets=bnd_side,
              vismesh_rel_area = 0.1)
