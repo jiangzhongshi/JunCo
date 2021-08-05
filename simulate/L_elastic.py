@@ -80,6 +80,72 @@ def check_stress(v,t,order):
     print(misises.max())
     return p_uni, t_uni, d_uni, misises[indices]
 
+def surface_Lbulge(m=1):
+    V = np.array([[-1,-1, 0], [2,-1 ,0],[2,0, 0],[.5,0,0],[0,.5,0],[0,2,0],[-1,2,0]])
+    theta = np.linspace(0,np.pi/2,m+1)[1:-1]
+    middle = np.array([[np.cos(t), np.sin(t),0] for t in theta])/2
+    print(middle)
+    V = np.vstack([V[:4], middle ,V[4:]])
+    cyc = lambda n: np.array([np.arange(n), (np.arange(n)+1)%n]).T
+    E1 = cyc(len(V))
+    V1 = V + np.array([[0,0,1]])
+    n = len(V)
+    side = []
+    for i in range(n-1):
+        side += [[0,(i+1)%n, (i+2)%n], [n,n+(i+1)%n, n+(i+2)%n]]
+    for i in range(n):
+        side += [[i,(i+1)%n,n+i],[(i+1)%n,n+i,n+(1+i)%n]]
+    return np.vstack([V,V1]), np.array(side)
+
+def extrude_holes(m,area=0.1):
+    V = np.array([[-1,-1,0],[1,-1,0],[1,1,0],[-1,1,0]])
+    theta = -np.linspace(0,np.pi*2,m+3)[:-1]
+    radius = np.sqrt(area *2/(m+2)/np.sin(np.pi*2/(m+2)))
+    middle = np.array([[np.cos(t), np.sin(t),0] for t in theta])*radius
+    extra = np.vstack([(1/2)**(np.arange(m)),(1/2)**(np.arange(m)), np.zeros(m)]).T*radius#np.array([[0.1*np.cos(t), 0.1*np.sin(t),0] for t in theta])*radius
+    print(radius)
+    cyc = lambda n: np.array([np.arange(n), (np.arange(n)+1)%n]).T
+    E = cyc(len(V))
+    E1 = cyc(len(middle))
+    pytri = pymesh.triangle()
+    (pytri.points, pytri.segments, 
+     pytri.max_num_steiner_points) = (np.vstack([V,middle, extra]), 
+                                      np.vstack([E,E1+len(V)]), -1)
+    pytri.run()
+    mesh = pytri.mesh
+    n0 = len(V)
+    V = pytri.vertices
+    V1 = V + np.array([[0,0,0.5]])
+    n = len(V)
+    
+    bnd = igl.boundary_loop(pytri.faces)
+    side = []
+    n0 = len(bnd)
+    for i in range(n0):
+        side += [[bnd[i],bnd[(i+1)%n0],n+bnd[i]],[bnd[(i+1)%n0],n+bnd[i],n+bnd[(1+i)%n0]]]
+    return np.vstack([V,V1]), np.vstack([mesh.faces, mesh.faces+n,np.array(side)])
+
+
+def surface_Ldent(m=1):
+    V = np.array([[-1,-1, 0], [2,-1 ,0],[2,0, 0],[.5,0,0],[0,.5,0],[0,2,0],[-1,2,0]])
+    theta = -np.linspace(0,np.pi/2*3,m+1)[1:-1]
+    middle = np.array([[np.cos(t), np.sin(t),0] for t in theta])/2
+    print(middle)
+    V = np.vstack([V[:4], middle ,V[4:]])
+    cyc = lambda n: np.array([np.arange(n), (np.arange(n)+1)%n]).T
+    E1 = cyc(len(V))
+    pytri = pymesh.triangle()
+    pytri.points = V
+    pytri.segments = E1
+    pytri.max_num_steiner_points = 0
+    pytri.run()
+    mesh = pytri.mesh
+    V1 = V + np.array([[0,0,1]])
+    n = len(V)
+    side = []
+    for i in range(n):
+        side += [[i,(i+1)%n,n+i],[(i+1)%n,n+i,n+(1+i)%n]]
+    return np.vstack([V,V1]), np.vstack([mesh.faces, mesh.faces+n,np.array(side)])
 
 
 def load_tetgenio(filename):
