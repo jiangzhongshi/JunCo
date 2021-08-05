@@ -245,6 +245,8 @@ def quad_fit(V, F, quads, q2t, trim_types, level, order, bsv, query, regularizer
                                       ijk))
     assert A.shape[0] == all_samples.shape[0]
     sol = quadratic_minimize(A, all_samples)
+    res = np.linalg.norm(A@sol - all_samples, axis=1)
+    print('Residual', res.mean(), res.max())
     all_cp = sol[F_qh_order]
     return all_cp, all_samples
 
@@ -411,6 +413,8 @@ def constrained_cc_fit(V, F, siblings, newquads, known_cp, level:int, order:int,
                                       ijk))
 
     sol = quadratic_minimize(A, all_samples, (known_ids, known_vals))
+    res = np.linalg.norm(A@sol - all_samples, axis=1)
+    print('Residual', res.mean(), res.max())
     all_cp = sol[F_or]
     return all_cp
 
@@ -425,7 +429,6 @@ def query(t_bc_i, denom):
         list_fid[i], u,v, _ = query.aabb.segment_hit(b,t, False)
         list_bc[i] = (1-u-v,u,v)
     return np.einsum('sed,se->sd', query.inpV[query.refF[list_fid]], list_bc)
-
 
 
 def split_square(width):

@@ -10,13 +10,8 @@ import igl
 import sys
 sys.path.append('/home/zhongshi/Workspace/bichon/python/debug')
 import prism
-from spline import cubic_spline as csp
+import os
 import scipy
-import plotly.graph_objects as go
-
-from meshplotplus.plot import scale, use_scale
-
-from vis_utils import highorder_sv
 
 import quad.bezier as qb
 
@@ -80,14 +75,12 @@ def valid_pairing(faces, score, sharp_markers, valid_combine_func):
     return occupied, pairs
 
 
-def main():
-    V,F,refV,refF,inpV,mB,mT = h5reader('/home/zhongshi/ntopo/ntopmodels/robotarm_with_passive_tetwild_refined.obj.h5',
+def main(input_file, output_file = None, order =3, level=6, post_check=False):
+    V,F,refV,refF,inpV,mB,mT = h5reader(input_file,
                                             'mV','mF','ref.V','ref.F','inpV','mbase','mtop')
 
     ## Bezier fitting
-    level = 6
-    order = 3
-    A = scipy.sparse.coo_matrix(qb.bezier_fit_matrix(order, level))
+    A = scipy.sparse.coo_matrix(qb.bezier_fit_matrix(order, level)).tocsr()
     query = qr.query
     query.aabb, query.F, query.mB, query.mT, query.inpV, query.refF = prism.AABB(refV, refF), F, mB, mT, inpV, refF
 
@@ -114,23 +107,26 @@ def main():
 
     quad_cp, samples = qr.quad_fit(V, F, quads, q2t, trim_types, level, order, A, query, None)
 
-    valids = bezier_check_validity(mB, mT, F,quads, q2t, trim_types, quad_cp, 3)
+    if post_check:
+        valids = bezier_check_validity(mB, mT, F,quads, q2t, trim_types, quad_cp, 3)
 
-    print('valids', np.count_nonzero(valids), '/', len(valids))
-    # adjust quads, quads_cp, q2t, t2q based on validity
-    siblings[q2t[valids==False].flatten()] = -1
-    quads = quads[valids]
-    quad_cp = quad_cp[valids]
-    q2t = q2t[valids]
-    t2q = np.ones_like(t2q) * -1
-    for q, (t0,t1) in enumerate(q2t):
-        t2q[t0] = q
-        t2q[t1] = q
+        print('valids', np.count_nonzero(valids), '/', len(valids))
+        # adjust quads, quads_cp, q2t, t2q based on validity
+        siblings[q2t[valids==False].flatten()] = -1
+        quads = quads[valids]
+        quad_cp = quad_cp[valids]
+        q2t = q2t[valids]
+        t2q = np.ones_like(t2q) * -1
+        for q, (t0,t1) in enumerate(q2t):
+            t2q[t0] = q
+            t2q[t1] = q
     
     new_v, known_cp, newquads = qr.solo_cc_split(V, F, siblings, t2q, quads, quad_cp, order, subd=None)
     cc_cp = qr.constrained_cc_fit(V, F, siblings, newquads, known_cp, level, order, A, query)
-    return quad_cp, cc_cp
+    if output_file is None:
+        output_file = f'/home/zhongshi/ntopo/ntopmodels/fit/{os.path.basename(input_file)}.npz'
+    np.savez(output_file, cp0 = quad_cp, cp1 = cc_cp)
 
 if __name__ == '__main__':
-    q,c = main()
-    np.savez('temp.npz', q=np.array((q,c), dtype=object))
+    import fire
+    fire.Fire(main)
