@@ -4,15 +4,26 @@ from OCC.Core.Geom import Geom_BezierSurface, Geom_BSplineSurface
 from OCC.Core.TColGeom import TColGeom_Array2OfBezierSurface
 from OCC.Core.GeomConvert import GeomConvert_CompBezierSurfacesToBSplineSurface
 from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+from OCC.Display.SimpleGui import init_display
+from OCC.Core.STEPControl import STEPControl_Writer, STEPControl_AsIs
+from OCC.Core.Interface import Interface_Static_SetCVal
+import numpy as np
 
-def simple_vis(surf):
-	from OCC.Display.SimpleGui import init_display
-	display, start_display, add_menu, add_function_to_menu = init_display()
-	display.EraseAll()
-	display.DisplayShape(surf, update=True)
-	start_display()
+def example_vis(surf):
+    display, start_display, add_menu, add_function_to_menu = init_display()
+    display.EraseAll()
+    display.DisplayShape(surf, update=True)
+    start_display()
 
 def cp_to_bz(cp):
+    """Tensor Product (Bezier) Control Points to OCC-BezierSurface object.
+
+    Args:
+        cp (np.array): input control point, 4x4x3
+
+    Returns:
+        OCC-Geom_BezierSurface: OCC internal type for a Bezier Patch
+    """
     array1 = TColgp_Array2OfPnt(1, len(cp), 1, len(cp))
     for i in range(1,len(cp)+1):
         for j in range(1,len(cp)+1):
@@ -20,35 +31,52 @@ def cp_to_bz(cp):
     BZ1 = Geom_BezierSurface(array1)
     return BZ1
 
-def write_to_step(output_file, quad_cp):
-	from OCC.Core.STEPControl import STEPControl_Writer, STEPControl_AsIs
-	from OCC.Core.Interface import Interface_Static_SetCVal
-	from OCC.Core.IFSelect import IFSelect_RetDone
-	from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_MakeFace
-	step_writer = STEPControl_Writer()
-	Interface_Static_SetCVal("write.step.schema", "AP203")
+def cp_write_to_step(output_file, quad_cp):
+    step_writer = STEPControl_Writer()
+    Interface_Static_SetCVal("write.step.schema", "AP203")
 
-	for cp in quad_cp:
-		assert len(cp) == 16
-		b1 = cp_to_bz(cp.reshape(4,4,3))
-		build = OCC.Core.BRepBuilderAPI.BRepBuilderAPI_MakeFace(b1, 1e-6)
-		step_writer.Transfer(build.Shape(),STEPControl_AsIs)
-	status = step_writer.Write(output_file)
+    for cp in quad_cp:
+        assert len(cp) == 16
+        b1 = cp_to_bz(cp.reshape(4,4,3))
+        build = BRepBuilderAPI_MakeFace(b1, 1e-6)
+        step_writer.Transfer(build.Shape(),STEPControl_AsIs)
+    status = step_writer.Write(output_file)
 
-def compose_bezier(BZ1):
-	bezierarray = TColGeom_Array2OfBezierSurface(1, 1, 1, 1)
-	bezierarray.SetValue(1, 1, BZ1)
-	BB = GeomConvert_CompBezierSurfacesToBSplineSurface(bezierarray)
-	if BB.IsDone():
-		poles = BB.Poles().Array2()
-		uknots = BB.UKnots().Array1()
-		vknots = BB.VKnots().Array1()
-		umult = BB.UMultiplicities().Array1()
-		vmult = BB.VMultiplicities().Array1()
-		udeg = BB.UDegree()
-		vdeg = BB.VDegree()
-		BSPLSURF = Geom_BSplineSurface( poles, uknots, vknots, umult, vmult, udeg, vdeg, False, False)
 
-		return BSPLSURF
-	else:
-		return None
+def compose_bezier(bz_list):
+    bezierarray = TColGeom_Array2OfBezierSurface(1, len(bz_list), 1, 1)
+    for i,b in enumerate(bz_list):
+        bezierarray.SetValue(i+1, 1, b)
+    BB = GeomConvert_CompBezierSurfacesToBSplineSurface(bezierarray)
+    if BB.IsDone():
+        poles = BB.Poles().Array2()
+        uknots = BB.UKnots().Array1()
+        vknots = BB.VKnots().Array1()
+        umult = BB.UMultiplicities().Array1()
+        vmult = BB.VMultiplicities().Array1()
+        udeg = BB.UDegree()
+        vdeg = BB.VDegree()
+        BSPLSURF = Geom_BSplineSurface( poles, uknots, vknots, umult, vmult, udeg, vdeg, False, False)
+
+        return BSPLSURF
+    else:
+        return None
+
+def test_compose():
+    cp = np.zeros((4,4,3))
+    cp2 = np.zeros((4,4,3))
+    for i in range(4):
+        for j in range(4):
+            cp[i,j] = (i-3, j,(i-3)**2)
+            cp2[i,j] = (i,j,i**2)
+    b1 = cp_to_bz(cp)
+    b2 = cp_to_bz(cp2)
+    bsp = compose_bezier([b1,b2])
+
+    step_writer = STEPControl_Writer()
+    Interface_Static_SetCVal("write.step.schema", "AP203")
+
+    build = BRepBuilderAPI_MakeFace(bsp, 1e-6)
+    step_writer.Transfer(build.Shape(),STEPControl_AsIs)
+    status = step_writer.Write('test.stp')
+    

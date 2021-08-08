@@ -1,7 +1,5 @@
 from curve import fem_tabulator as feta
-import osqp
 import numpy as np
-from curve import fem_tabulator as fetaa
 import igl
 import scipy
 import tqdm

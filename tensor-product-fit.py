@@ -12,34 +12,8 @@ sys.path.append('/home/zhongshi/Workspace/bichon/python/debug')
 import prism
 import os
 import scipy
-
 import quad.bezier as qb
-
 import tqdm
-def bezier_check_validity(mB,mT,F, quads, q2t, trim_types, quad_cp, order, progress_bar = True):
-    all_b, all_t = qr.top_and_bottom_sample(mB,mT, F, quads, q2t, trim_types, level=1)
-    v4, f4 = qr.split_square(1)
-
-    tup = feta.tuple_gen(order = order + 1, var_n=2) # elevated one order for quartic tetrahedra
-    grids = np.einsum('fed,Ee->fEd', v4[f4], np.asarray(tup))
-    
-    grid_ids = np.ravel_multi_index(grids.reshape(-1,2).T, dims = (order + 2, 
-                                                                   order + 2)).reshape(len(f4), -1)
-    valid_quad = np.ones(len(quad_cp), dtype=bool)
-    
-    A13 = qb.bezier_fit_matrix(order, order+1)
-    if progress_bar: 
-        pbar = tqdm.tqdm(quad_cp, desc='Bezier Quads Checking validity')
-    else:
-        pbar = quad_cp
-    for q,qcp in enumerate(pbar):
-        lagr = A13@qcp
-        for t,g in zip(f4, grid_ids):
-            if not (prism.elevated_positive_check(all_b[q][t], all_t[q][t], 
-                                                  lagr[g], True)):
-                valid_quad[q] = False
-                break
-    return valid_quad
 
 def valid_pairing(faces, score, sharp_markers, valid_combine_func):
     tt, tti = igl.triangle_triangle_adjacency(faces)
@@ -93,7 +67,7 @@ def main(input_file, output_file = None, order =3, level=6, post_check=False):
         sample_vals = query(tbc0, denom=level)
         local_cp = qr.quadratic_minimize(A, sample_vals)
         # Second, check
-        v = bezier_check_validity(mB, mT, F[[fi,fo]], quad.reshape(-1,4), np.array([[0,1]]), 
+        v = qb.bezier_check_validity(mB, mT, F[[fi,fo]], quad.reshape(-1,4), np.array([[0,1]]), 
                                  trims, np.array([local_cp]), order,
                                 progress_bar=False)
 
