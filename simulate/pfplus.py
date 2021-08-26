@@ -56,7 +56,6 @@ def hollow_ball(input_file):
     d = dict(mesh=input_file,
             normalize_mesh=False,
             params=dict(E=2e4, nu=0.48, density=2e3),
-            # time_steps = 100,
             tend = 2.0,
             discr_order=2,
             problem='GenericTensor',
