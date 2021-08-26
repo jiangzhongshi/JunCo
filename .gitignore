@@ -8,3 +8,6 @@ __pycache__
 .vscode/
 temp/
 simulate/data/
+data/step*
+*.pvd
+step_2.obj

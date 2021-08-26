@@ -1,5 +1,4 @@
 import igl
-import meshplot as mp
 import numpy as np
 import polyfempy as pf
 import sys
@@ -160,6 +159,25 @@ def load_tetgenio(filename):
         verts = verts[:,1:]
     return verts, tet
 
+import tempfile
+import subprocess
+import os
+def tetgen(v,f, args='-pg'):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        igl.write_triangle_mesh(tmpdir + '/mesh.off', v,f)
+        ret = subprocess.run(['/home/zhongshi/Workspace/tetgen/build/tetgen',args, tmpdir + '/mesh.off'], 
+                        env = dict(OMP_NUM_THREADS='4'))
+        if ret.returncode != 0:
+            raise RuntimeError('tetgen failed')
+        return load_tetgenio(tmpdir + '/mesh.1')
+    # meshio.write_points_cells('simulate/data/hollow_ball_simp.msh', tetP, [('tetra',tetT)])
+
+def test_tetgen():
+    v, f = igl.read_triangle_mesh('/home/zhongshi/Workspace/libigl/tutorial/data/bunny.off')
+    p, t = tetgen(v,f)
+    print(p.shape, t.shape)
+    return 0
+
 def main(mesh_type, cell_size, order):
     if mesh_type == 'L':
 	    v, t = prepare_L_mesh(cell_size=cell_size)
@@ -171,4 +189,3 @@ def main(mesh_type, cell_size, order):
 
 if __name__ == '__main__':
 	import fire
-	fire.Fire(main)
