@@ -11,7 +11,6 @@ import igl
 import numpy as np
 from datetime import datetime
 import re
-from datetime import datetime
 from plotly import graph_objects as go
 import pandas
 

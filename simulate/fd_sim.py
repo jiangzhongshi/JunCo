@@ -1,10 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-
+import os
+os.environ["OMP_NUM_THREADS"] = "1" # export OMP_NUM_THREADS=1
+os.environ["OPENBLAS_NUM_THREADS"] = "1" # export OPENBLAS_NUM_THREADS=1
+os.environ["MKL_NUM_THREADS"] = "1" # export MKL_NUM_THREADS=1
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1" # export VECLIB_MAXIMUM_THREADS=1
+os.environ["NUMEXPR_NUM_THREADS"] = "1" # export NUMEXPR_NUM_THREADS=1
 import firedrake as fd
 from firedrake.cython import dmcommon
-import datetime
+from datetime import datetime
 from firedrake.cython import dmcommon
 from firedrake.petsc import PETSc
 from firedrake.utility_meshes import UnitCubeMesh, UnitSquareMesh
@@ -77,7 +82,7 @@ def elastic_solve(mesh, bc_list, body_force = (0,0,0), settings = {}, materials 
             dt = t_end - ti
         ti += dt
         t = Constant(ti)
-        print('>'*20, ti, dt)
+        print(datetime.now().strftime('[%Y-%m-%d %H:%M:%S.%f]'), '>'*20, ti, dt)
         sys.stdout.flush()
         try:
             solve(F == 0, u, bc_list(V, x,y,z,t), J=J,
@@ -85,7 +90,7 @@ def elastic_solve(mesh, bc_list, body_force = (0,0,0), settings = {}, materials 
         except fd.ConvergenceError:
             ti -= dt
             dt /= 2
-            print('dt bt', dt)
+            print(datetime.now().strftime('[%Y-%m-%d %H:%M:%S.%f]'), 'dt bt', dt)
         else:
             dt = (target_dt + dt)/2
         
@@ -109,19 +114,20 @@ def find_perm(v0,v1):
 
 def hollow_ball(input_file):
     def bc_setter(face_coords):
-        p = (face_coords).reshape(3,3)
+        p = (face_coords).reshape(3,3).mean(axis=0)
         if np.linalg.norm(p - np.array([.5,.5,0])) < 0.1:
             return 1
         if np.linalg.norm(p - np.array([.5,.5,1])) < 0.1:
             return 2
         return 3
     def bc_list(V,x,y,z,t):
-        c = Constant([0.0, 0, 0.01*t])
+        c = fd.Constant([0.0, 0, 0.01*t])
         r = [fd.cos(t)*(x-0.5) + fd.sin(t) * (y-0.5)+ 0.5 - x, 
             -fd.sin(t)*(x-0.5) + fd.cos(t) * (y-0.5) + 0.5 - y, 0] 
-        return [DirichletBC(V, c, 1),
-               DirichletBC(V, r, 2)]
+        return [fd.DirichletBC(V, c, 1),
+               fd.DirichletBC(V, r, 2)]
 
+    start_time = time.time()
     mesh_read = meshio.read(input_file)
     mesh = construct_fd_mesh(mesh_read.points, mesh_read.cells[0][1], bc_setter)
     um,vm = elastic_solve(mesh, bc_list, 
@@ -139,7 +145,8 @@ def hollow_ball(input_file):
             'ksp_atol': 1e-10,
             'snes_monitor': None,
         })
-
+    end_time = time.time()
+    print(datetime.now().strftime('[%Y-%m-%d %H:%M:%S.%f]'), f'Elapsed time: {(end_time - start_time)}')
     perm_id = find_perm(mesh.coordinates.dat.data_ro, 
                     mesh_read.points)
     disp = um.dat.data[perm_id]
@@ -157,17 +164,17 @@ def tubes(input_file):
         return 3
 
     def bc_list(V,x,y,z,t):
-        c = Constant([0.05*t, 0, 0])
-        r = [Constant(0), fd.cos(t)*y + fd.sin(t)*z - y,
+        c = fd.Constant([0.05*t, 0, 0])
+        r = [fd.Constant(0), fd.cos(t)*y + fd.sin(t)*z - y,
                           -fd.sin(t)*y + fd.cos(t)*z - z]
-        return [DirichletBC(V, c, 1),
-               DirichletBC(V, r, 2)]
+        return [fd.DirichletBC(V, c, 1),
+               fd.DirichletBC(V, r, 2)]
 
     mesh_read = meshio.read(input_file)
     mesh = construct_fd_mesh(mesh_read.points, mesh_read.cells[0][1], bc_setter)
     um,vm = elastic_solve(mesh, bc_list, 
             body_force = (0.0, 1e2, 0.0),
-            settings = dict(dt=0.1, tmax=2),
+            settings = dict(dt=0.3, tmax=3),
             materials = dict(E=2e4, nu=0.48, rho=2e3),
             parameters= {
             'snes_type': 'newtonls',
@@ -186,7 +193,7 @@ def tubes(input_file):
     disp = um.dat.data[perm_id]
     stress = vm.dat.data[perm_id]
     np.savez(input_file + '.fd.npz', disp = disp, stress = stress, cells = mesh_read.cells[0][1], verts = mesh_read.points)
-    print('Finished!! Save.')
+    print(datetime.now().strftime('[%Y-%m-%d %H:%M:%S.%f]'), 'Finished!! Save.')
 
 # meshio.write('temp.msh', 
 #              meshio.Mesh(points=mesh_read.points, 
@@ -197,12 +204,6 @@ def tubes(input_file):
 # plex = Mesh('temp.msh')
 
 if __name__ == '__main__':
-    import os
-    os.environ["OMP_NUM_THREADS"] = "1" # export OMP_NUM_THREADS=1
-    os.environ["OPENBLAS_NUM_THREADS"] = "1" # export OPENBLAS_NUM_THREADS=1
-    os.environ["MKL_NUM_THREADS"] = "1" # export MKL_NUM_THREADS=1
-    os.environ["VECLIB_MAXIMUM_THREADS"] = "1" # export VECLIB_MAXIMUM_THREADS=1
-    os.environ["NUMEXPR_NUM_THREADS"] = "1" # export NUMEXPR_NUM_THREADS=1
     import gc
     gc.disable()
 

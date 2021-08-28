@@ -10,4 +10,5 @@ temp/
 simulate/data/
 data/step*
 *.pvd
-step_2.obj
+step*
+data/
