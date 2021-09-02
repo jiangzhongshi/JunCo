@@ -54,6 +54,6 @@ def shell_gen(n, nw):
     meshio.write(f'simulate/data/tube_{n}_{nw}.msh', meshio.Mesh(points = v, cells = [('tetra', t)]))
 
 if __name__ == '__main__':
-    for n in [40]:
-        for nw in [60,80,100,150, 200,300]:
+    for n in [3,5,10, 20]:
+        for nw in [10, 20,40,60,80]:
             shell_gen(n, nw)
