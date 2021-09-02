@@ -4,7 +4,7 @@ import json
 import tempfile
 import subprocess
 import os
-def main(input_file):
+def tubes(input_file):
     prob_params = dict(
         dirichlet_boundary = [dict(id=1, value=['0.05*t','0','0']),
                               dict(id=2, value=['0',
@@ -40,7 +40,7 @@ def main(input_file):
         fp.write(json.dumps(d))
         fp.seek(0)
         subprocess.run(['/home/zhongshi/Workspace/polyfem/build/PolyFEM_bin', '--log_level', '1',  '--cmd', '--json', fp.name, '-o', 'data/'],  # tubes
-                        env = dict(OMP_NUM_THREADS='4'))
+                        env = dict(OMP_NUM_THREADS='1'))
 
 def hollow_ball(input_file):
     #  = 'simulate/data/math_form_1_obj.msh'

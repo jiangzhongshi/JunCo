@@ -10,7 +10,7 @@ def tetmesh_from_shell(base, top, F):
         T.append((tet_c // 3)*vnum + f[tet_c % 3])
     return np.vstack([base, top]), np.vstack(T)
 
-def tube(length: float = 1.0, radius: float = 1.0, n: int = 30, nw : int = -1):
+def tube(length: float = 1.0, radius: float = 1.0, n: int = 30, nw : int = -1, distribute = None):
     """tube Function from nschole/MeshZoo"""
     # Number of nodes along the width of the strip (>= 2)
     # Choose it such that we have approximately square boxes.
@@ -20,6 +20,8 @@ def tube(length: float = 1.0, radius: float = 1.0, n: int = 30, nw : int = -1):
     # Generate suitable ranges for parametrization
     u_range = np.linspace(0.0, 2 * np.pi, num=n, endpoint=False)
     v_range = np.linspace(0 * length, 1 * length, num=nw)
+    if distribute is not None:
+        v_range = distribute(np.linspace(0, 1, num=nw))
 
     # Create the vertices.
     proto_nodes = np.dstack(np.meshgrid(u_range, v_range, indexing="ij")).reshape(-1, 2)
@@ -45,15 +47,19 @@ def tube(length: float = 1.0, radius: float = 1.0, n: int = 30, nw : int = -1):
 
     return nodes, np.array(elems)
 
-def shell_gen(n, nw):
-    base, f_b = tube(length=16.0, radius=0.9, n=n, nw = nw)
-    top, f_t = tube(length=16.0, radius=1.0, n=n, nw = nw)
+def shell_gen(n, nw, adapt=False):
+    func = None
+    if adapt:
+        func =  lambda x: 16 * np.concatenate([np.linspace(i/3, (i+1)/3, l,endpoint=(i==2)) for i,l in enumerate([5,len(x) - 10,5])])
+
+    base, f_b = tube(length=16.0, radius=0.9, n=n, nw = nw, distribute=func)
+    top, f_t = tube(length=16.0, radius=1.0, n=n, nw = nw, distribute=func)
     v, t = tetmesh_from_shell(base, top, f_b)
     v /= 16.0
     print(n,nw, t.shape)
-    meshio.write(f'simulate/data/tube_{n}_{nw}.msh', meshio.Mesh(points = v, cells = [('tetra', t)]))
+    meshio.write(f'simulate/data/tube_{n}_{nw}_A{adapt}.msh', meshio.Mesh(points = v, cells = [('tetra', t)]))
 
 if __name__ == '__main__':
-    for n in [40]:
-        for nw in [60,80,100,150, 200,300]:
-            shell_gen(n, nw)
+    for n in [30]:
+        for nw in [10,20,30,40,50,60]:
+            shell_gen(n, nw, True)
