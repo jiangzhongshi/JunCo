@@ -1,4 +1,5 @@
 import numpy as np
+import igl
 import meshio
 def tetmesh_from_shell(base, top, F):
     tetra_splits = (np.array([0, 3, 4, 5, 1, 4, 2, 0, 2, 5, 0, 4]).reshape(-1, 4),
@@ -47,19 +48,23 @@ def tube(length: float = 1.0, radius: float = 1.0, n: int = 30, nw : int = -1, d
 
     return nodes, np.array(elems)
 
-def shell_gen(n, nw, adapt=False):
+def shell_gen(n, nw, upsample = 0, adapt=False, ):
     func = None
     if adapt:
         func =  lambda x: 16 * np.concatenate([np.linspace(i/3, (i+1)/3, l,endpoint=(i==2)) for i,l in enumerate([5,len(x) - 10,5])])
 
     base, f_b = tube(length=16.0, radius=0.9, n=n, nw = nw, distribute=func)
-    top, f_t = tube(length=16.0, radius=1.0, n=n, nw = nw, distribute=func)
+    top, _ = tube(length=16.0, radius=1.0, n=n, nw = nw, distribute=func)
+    for _ in range(upsample):
+        base, _  = igl.upsample(base, f_b)
+        top, f_b  = igl.upsample(top, f_b)
     v, t = tetmesh_from_shell(base, top, f_b)
     v /= 16.0
     print(n,nw, t.shape)
-    meshio.write(f'simulate/data/tube_{n}_{nw}_A{adapt}.msh', meshio.Mesh(points = v, cells = [('tetra', t)]))
+    adapt_token = 'A' if adapt else ''
+    meshio.write(f'simulate/data/tube_{n}_{nw}_{adapt_token}_up{upsample}.msh', meshio.Mesh(points = v, cells = [('tetra', t)]))
 
 if __name__ == '__main__':
-    for n in [3,5,10, 20]:
-        for nw in [10, 20,40,60,80]:
-            shell_gen(n, nw)
+    for n in [3,5,10,20, 40]:
+        for nw in [10, 20,40,60]:
+            shell_gen(n, nw, upsample = 2)

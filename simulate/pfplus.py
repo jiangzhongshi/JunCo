@@ -4,7 +4,7 @@ import json
 import tempfile
 import subprocess
 import os
-def tubes(input_file):
+def tubes(input_file, order=1, suffix=''):
     prob_params = dict(
         dirichlet_boundary = [dict(id=1, value=['0.05*t','0','0']),
                               dict(id=2, value=['0',
@@ -17,13 +17,13 @@ def tubes(input_file):
         dict(id=1, axis=-1, position=0.01),
         dict(id=2, axis=1, position=0.995),
     ]
-    export_params = dict(vis_mesh=os.path.basename(input_file)+'.res', surface=True)
+    export_params = dict(vis_mesh=os.path.basename(input_file)+suffix + '.res', surface=True)
     d = dict(mesh=input_file,
             tend = 3.0,
             time_steps=10,
              normalize_mesh=False,
              params=dict(E=2e4, nu=0.48, rho=1e2),
-             discr_order=1,
+             discr_order=order,
              problem='GenericTensor',
              tensor_formulation = "NeoHookean",
              problem_params = prob_params,
@@ -42,7 +42,7 @@ def tubes(input_file):
         subprocess.run(['/home/zhongshi/Workspace/polyfem/build/PolyFEM_bin', '--log_level', '1',  '--cmd', '--json', fp.name, '-o', 'data/'],  # tubes
                         env = dict(OMP_NUM_THREADS='1'))
 
-def hollow_ball(input_file):
+def hollow_ball(input_file, order=1, suffix=''):
     #  = 'simulate/data/math_form_1_obj.msh'
     t = 't' # time dependent variable
     bc_params = dict(
@@ -56,12 +56,12 @@ def hollow_ball(input_file):
         dict(id=1, center=[.5,.5,0], radius=0.1),
         dict(id=2, center=[.5,.5,1], radius=0.1),
     ]
-    export_params = dict(vis_mesh=os.path.basename(input_file)+'.res', surface=True)
+    export_params = dict(vis_mesh=os.path.basename(input_file)+suffix + '.res', surface=True)
     d = dict(mesh=input_file,
             normalize_mesh=False,
             params=dict(E=2e4, nu=0.48, density=2e3),
             tend = 2.0,
-            discr_order=1,
+            discr_order=order,
             time_steps = 10,
             problem='GenericTensor',
             tensor_formulation = "NeoHookean",
@@ -72,6 +72,7 @@ def hollow_ball(input_file):
             export = export_params,
             boundary_sidesets=bnd_side,
             vismesh_rel_area = 0.1)
+            
     print(json.dumps(d))
     sys.stdout.flush()
     
