@@ -4,7 +4,7 @@ import json
 import tempfile
 import subprocess
 import os
-def tubes(input_file, order=1, suffix=''):
+def tubes(input_file, order=1, n_refs=0, suffix=''):
     prob_params = dict(
         dirichlet_boundary = [dict(id=1, value=['0.05*t','0','0']),
                               dict(id=2, value=['0',
@@ -17,7 +17,7 @@ def tubes(input_file, order=1, suffix=''):
         dict(id=1, axis=-1, position=0.01),
         dict(id=2, axis=1, position=0.995),
     ]
-    export_params = dict(vis_mesh=os.path.basename(input_file)+suffix + '.res', surface=True)
+    export_params = dict(vis_mesh=os.path.basename(input_file) + suffix + '.res', surface=True)
     d = dict(mesh=input_file,
             tend = 3.0,
             time_steps=10,
@@ -25,6 +25,7 @@ def tubes(input_file, order=1, suffix=''):
              params=dict(E=2e4, nu=0.48, rho=1e2),
              discr_order=order,
              problem='GenericTensor',
+             n_refs = n_refs, 
              tensor_formulation = "NeoHookean",
              problem_params = prob_params,
              project_to_psd=True,

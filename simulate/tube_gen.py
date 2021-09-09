@@ -65,6 +65,6 @@ def shell_gen(n, nw, upsample = 0, adapt=False, ):
     meshio.write(f'simulate/data/tube_{n}_{nw}_{adapt_token}_up{upsample}.msh', meshio.Mesh(points = v, cells = [('tetra', t)]))
 
 if __name__ == '__main__':
-    for n in [3,5,10,20, 40]:
-        for nw in [10, 20,40,60]:
-            shell_gen(n, nw, upsample = 2)
+    for n in [3,5]:
+        for nw in [10, 20]:
+            shell_gen(n, nw, upsample = 4)
