@@ -1,6 +1,8 @@
 import numpy as np
 import igl
 import meshio
+
+
 def tetmesh_from_shell(base, top, F):
     tetra_splits = (np.array([0, 3, 4, 5, 1, 4, 2, 0, 2, 5, 0, 4]).reshape(-1, 4),
                     np.array([0, 3, 4, 5, 1, 4, 5, 0, 2, 5, 0, 1]).reshape(-1, 4))
@@ -11,7 +13,8 @@ def tetmesh_from_shell(base, top, F):
         T.append((tet_c // 3)*vnum + f[tet_c % 3])
     return np.vstack([base, top]), np.vstack(T)
 
-def tube(length: float = 1.0, radius: float = 1.0, n: int = 30, nw : int = -1, distribute = None):
+
+def tube(length: float = 1.0, radius: float = 1.0, n: int = 30, nw: int = -1, distribute=None):
     """tube Function from nschole/MeshZoo"""
     # Number of nodes along the width of the strip (>= 2)
     # Choose it such that we have approximately square boxes.
@@ -25,7 +28,8 @@ def tube(length: float = 1.0, radius: float = 1.0, n: int = 30, nw : int = -1, d
         v_range = distribute(np.linspace(0, 1, num=nw))
 
     # Create the vertices.
-    proto_nodes = np.dstack(np.meshgrid(u_range, v_range, indexing="ij")).reshape(-1, 2)
+    proto_nodes = np.dstack(np.meshgrid(
+        u_range, v_range, indexing="ij")).reshape(-1, 2)
     nodes = np.column_stack(
         [
             proto_nodes[:, 1],
@@ -46,25 +50,38 @@ def tube(length: float = 1.0, radius: float = 1.0, n: int = 30, nw : int = -1, d
         elems.append([(n - 1) * nw + j, j + 1, (n - 1) * nw + j + 1])
         elems.append([(n - 1) * nw + j, j, j + 1])
 
+    # Quads
+    # for i in range(n - 1):
+    #     for j in range(nw - 1):
+    #         elems.append([i * nw + j, (i + 1) * nw + j, (i + 1) * nw + j + 1, i * nw + j + 1])
+
+    # # close the geometry
+    # for j in range(nw - 1):
+    #     elems.append([(n - 1) * nw + j, j, j + 1, (n - 1) * nw + j + 1])
+
     return nodes, np.array(elems)
 
-def shell_gen(n, nw, upsample = 0, adapt=False, ):
+
+def shell_gen(n, nw, upsample=0, adapt=False):
     func = None
     if adapt:
-        func =  lambda x: 16 * np.concatenate([np.linspace(i/3, (i+1)/3, l,endpoint=(i==2)) for i,l in enumerate([5,len(x) - 10,5])])
-
-    base, f_b = tube(length=16.0, radius=0.9, n=n, nw = nw, distribute=func)
-    top, _ = tube(length=16.0, radius=1.0, n=n, nw = nw, distribute=func)
+        def func(x): return 16 * np.concatenate([np.linspace(
+            i/3, (i+1)/3, l, endpoint=(i == 2)) for i, l in enumerate([5, len(x) - 10, 5])])
+    verts, faces = tube(length=16.0, radius=1, n=n, nw=nw, distribute=func)
     for _ in range(upsample):
-        base, _  = igl.upsample(base, f_b)
-        top, f_b  = igl.upsample(top, f_b)
-    v, t = tetmesh_from_shell(base, top, f_b)
+        verts, faces = igl.upsample(verts, faces)
+
+    v, t = tetmesh_from_shell(verts*[1, .9, .9], verts, faces)
     v /= 16.0
-    print(n,nw, t.shape)
-    adapt_token = 'A' if adapt else ''
-    meshio.write(f'simulate/data/tube_{n}_{nw}_{adapt_token}_up{upsample}.msh', meshio.Mesh(points = v, cells = [('tetra', t)]))
+    print(n, nw, t.shape)
+    adapt_token = 'A' if adapt else 'U'
+    meshio.write(f'data/tube_{n}_{nw}_{adapt_token}_up{upsample}.msh',
+                 meshio.Mesh(points=v, cells=[('tetra', t)]))
+
 
 if __name__ == '__main__':
-    for n in [3,5]:
-        for nw in [10, 20]:
-            shell_gen(n, nw, upsample = 4)
+    import fire
+    fire.Fire(shell_gen)
+    # for n in [30,40,50]:
+    # for nw in [30, 40, 50]:
+    # shell_gen(n, nw, upsample = 0)
