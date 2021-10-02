@@ -17,7 +17,6 @@ def refine_tris(v,f, a,flag='-raYY'):
         info = (subprocess.run(f'/home/zhongshi/Workspace/triangle/triangle {flag} {name}', 
                                shell=True,capture_output=True))
         return read_node_ele(name + '.1')
-rv ,rf = refine_tris(tv,tf,np.exp(-10*np.linalg.norm(bc,axis=1)-2), flag='-raq')
 
 def read_node_ele(name):
     with open(f'{name}.node') as fp:
@@ -44,11 +43,10 @@ def triangle_triangulate(v,e,flag='-p'):
         with open(f'{name}.poly','w+') as fp:
             fp.write('\n'.join(lines))
         outputinfo = subprocess.run(f'/home/zhongshi/Workspace/triangle/triangle {flag} {name}.poly', shell=True, capture_output=True)
-        nodes, eles =  read_node_ele(name + '.1.')
+        nodes, eles =  read_node_ele(name + '.1')
     return nodes, eles
 
-area = 0.1
-def triangular_tube(area, axial_length = 16, radius=1):
+def boundary_gen(area, axial_length, radius):
     edgelen = np.sqrt(area)
     axial_cnt = int(axial_length/edgelen)
     circu_cnt = int(2*np.pi*radius/edgelen)
@@ -58,21 +56,18 @@ def triangular_tube(area, axial_length = 16, radius=1):
                  [(0,y) for y in np.linspace(1,0,circu_cnt,endpoint=False)])
     numv = len(v)
     e = np.array([(i,(i+1)%numv) for i in range(numv)])
+    return v*[axial_length,2*np.pi*radius], e
 
-    tv, tf = triangle_triangulate(v*[axial_length,2*np.pi*radius], e, f'-pYYPQa{area}')
+def roll_up(tv, tf):
     roll_v = np.stack([tv[:,0], np.sin(tv[:,1]), np.cos(tv[:,1])]).T
-
-    roll_map = np.arange(len(tv))
-    a_c = axial_cnt + circu_cnt
-    for j,i in enumerate(range(a_c, a_c+axial_cnt + 1)):
-        roll_map[i] = axial_cnt  - j
-    roll_map[a_c+axial_cnt +1:] -= axial_cnt+1
-
-    roll_ind = np.concatenate([np.arange(a_c),
-                               np.arange(a_c+axial_cnt + 1, len(tv))])
-
-    rv, rf = roll_v[roll_ind], roll_map[tf]
+    _, uind, uinv = np.unique(np.round(roll_v*1e8).astype(int), axis=0, return_index=True, return_inverse=True)
+    rv, rf = roll_v[uind], uinv[tf]
     def roll_face(f):
         return np.roll(f, -f.argmin())
     rf = np.array([roll_face(f) for f in rf])
     return rv, rf
+
+def triangular_tube(area, axial_length = 16, radius=1):
+    v, e = boundary_gen(area, axial_length, radius)
+    tv, tf = triangle_triangulate(v, e, f'-pYYPQa{area}')
+    return roll_up(tv, tf)

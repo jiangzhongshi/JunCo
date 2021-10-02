@@ -5,28 +5,36 @@ import tempfile
 import subprocess
 import os
 import meshio
+import ctypes
 
-def pf_run(d, input_file, suffix='', num_threads=2):
+def pf_run(d, input_file):
     with tempfile.TemporaryDirectory() as tmpdirname:
         if input_file.endswith('npz'):
             with np.load(input_file) as npl:
                 tet_v, tet_t = npl['tet_v'], npl['tet_t']
-                meshio.write(tmpdirname + '/input.msh', meshio.Mesh(points=tet_v, cells=[('tetra', tet_t)]))
+                meshio.write(tmpdirname + '/input.msh', meshio.Mesh(points=tet_v, cells=[('tetra', tet_t.astype(ctypes.c_size_t))]))
                 d['mesh'] = tmpdirname + '/input.msh'
         print(json.dumps(d))
         sys.stdout.flush()
         with open(tmpdirname + '/cmd.json','w') as fp:
             fp.write(json.dumps(d))
-        subprocess.run(['/home/zhongshi/Workspace/polyfem/build/PolyFEM_bin', 
+        
+        cmd = '/home/zhongshi/Workspace/polyfem/build/PolyFEM_bin'
+        if d['more']['check_hess']:
+            cmd = '/home/zhongshi/Workspace/polyfem/build/PolyFEM_hess_bin'
+        
+        num_threads = d['more']['num_threads']
+        suffix = d['more']['suffix']
+        subprocess.run([cmd, 
                         '--log_level', '1',  
                         '--max_threads', str(num_threads),
                         '--cmd', 
                         '-o', tmpdirname,
-                        '--json', tmpdirname + '/cmd.json'],  # hollow ball
+                        '--json', tmpdirname + '/cmd.json'], 
                     env = dict(OMP_NUM_THREADS=str(num_threads)))
         subprocess.run(f'mv {tmpdirname}/vis.vtu {input_file}.{suffix}res.vtu',shell=True)
 
-def tubes(input_file, order=1, n_refs=0, steps=10, suffix=''):
+def tubes(input_file, order=1, n_refs=0, steps=10, tdelta=0.3, suffix=''):
     prob_params = dict(
         dirichlet_boundary = [dict(id=1, value=['0.05*t','0','0']),
                               dict(id=2, value=['0',
@@ -34,13 +42,12 @@ def tubes(input_file, order=1, n_refs=0, steps=10, suffix=''):
                               f'-sin(t)*y + cos(t)*z - z'])],
         is_time_dependent = True,
         rhs = [0,10,0],
-  )
+    )
     bnd_side = [
         dict(id=1, axis=-1, position=0.01),
         dict(id=2, axis=1, position=0.995),
     ]
     export_params = dict(vis_mesh='vis.vtu')
-    tdelta = 0.3
     d = dict(mesh=input_file,
             tend = tdelta*steps,
             time_steps=steps,
@@ -58,8 +65,8 @@ def tubes(input_file, order=1, n_refs=0, steps=10, suffix=''):
              vismesh_rel_area = 1e-5)
     if d['discr_order'] > 1:
         d['lump_mass_matrix'] = True
-
-    pf_run(d, input_file, suffix=suffix)
+    d['more'] = dict(suffix=suffix, num_threads=2,check_hess=False)
+    pf_run(d, input_file)
 
 def hollow_ball(input_file, order=1, suffix=''):
     #  = 'simulate/data/math_form_1_obj.msh'
