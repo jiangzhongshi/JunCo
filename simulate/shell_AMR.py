@@ -112,9 +112,7 @@ def look_up(tv, tf, d_v, sol_mark, expand=False):
     return col
 
 
-def amr_test_run():
-    itemname = 'data/1002_grad/a1'
-    max_iterations = 4
+def amr_test_run(itemname, max_iterations = 5):
     gt_item = 'a0.01L2.npz.p2'
 
     # initial preparation
@@ -123,15 +121,18 @@ def amr_test_run():
     dense_uv, dense_tf, dense_ptr = explode_uv_coord(dense_v, dense_f)
 
     saver = {}
-    for name in glob.glob('data/0925_tube/a*t2res.vtu'):
-        src_uv, src_tf, src_sol, _ = load_and_process(name)
-        xf_sol = transfer_pymesh(src_uv, src_tf, src_sol,
+    src_uv, src_tf, src_sol, _ = load_and_process('data/0925_tube/a0.01L2.npz.p2t2res.vtu')
+    xf_sol = transfer_pymesh(src_uv, src_tf, src_sol,
                                  dense_uv, dense_tf)
-        saver[re.search('/a.*p.?', name).group(0)[1:]] = xf_sol
+    saver[gt_item] = xf_sol
 
     grad = igl.grad(dense_v[dense_ptr], dense_tf)
 
     for iteration in range(max_iterations):
+        cmd = f"python pfplus.py tubes {itemname}.it{iteration}.npz --order=2 --steps=2 --suffix='p2t2' > {itemname}.it{iteration}.npz.log"
+        print('>> Iterations ', iteration, 'Running >>', cmd)
+        subprocess.run(cmd, shell=True)
+
         src_uv, src_tf, src_sol, src_newv = load_and_process(
             f'{itemname}.it{iteration}.npz.p2t2res.vtu')
         xf_sol = transfer_pymesh(src_uv, src_tf, src_sol,
@@ -155,12 +156,10 @@ def amr_test_run():
         tetv, tett = tube_gen.tetmesh_from_shell(
             roll_v*[1, .9, .9], roll_v, roll_f)
         print('min_vol', igl.volume(tetv, tett).min(), tett.shape)
-        np.savez(f'{itemname}.it{iteration+1}.npz', uv=(refine_v, refine_f),
+        np.savez(f'{itemname}.it{iteration+1}.npz', uv=np.array((refine_v, refine_f), dtype=object),
                  ref_v=roll_v, ref_f=roll_f, tet_v=tetv, tet_t=tett)
-        cmd = f"python pfplus.py tubes {itemname}.it{iteration+1}.npz --order=2 --steps=2 --suffix='p2t2' > {itemname}.it{iteration+1}.npz.log"
-        print('>> Iterations ', iteration, 'Running >>', cmd)
-        subprocess.run(cmd, shell=True)
 
 
 if __name__ == '__main__':
-    amr_test_run()
+    import fire
+    fire.Fire(amr_test_run)
