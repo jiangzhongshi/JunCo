@@ -8,6 +8,17 @@ import igl
 import re
 import glob
 
+def dense_bar_gen():
+    for area in [0.01,0.02,0.05, 0.1,0.2,0.5, 1,2,5]:
+        rv, rf = triangle_rolls.triangular_tube(area=area)
+        rv /= 16
+        #mp.plot(rv/16,rf,wireframe=True)
+
+        tetv, tett = tube_gen.tetmesh_from_shell(rv*[1,.9,.9], rv, rf)
+        import igl
+        print(igl.volume(tetv,tett).min(), tett.shape)
+
+        np.savez(f'data/0925_tube/a{area}.npz', tet_v = tetv, tet_t = tett, ref_v = rv, ref_f = rf)
 
 def explode_uv_coord(verts, faces):
     """convert 3d mesh of a cylinder to UV coords.

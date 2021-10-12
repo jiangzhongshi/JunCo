@@ -25,7 +25,6 @@ def pf_run(d, input_file):
         pf_bin = '/home/zhongshi/Workspace/polyfem/build/PolyFEM_bin'
         if d['check_hess']:
             pf_bin = '/home/zhongshi/Workspace/polyfem/build_hess/PolyFEM_bin'
-            # pf_bin = '/home/zhongshi/Workspace/polyfem/build/PolyFEM_hess_bin'
 
         num_threads = d['num_threads']
         suffix = d['suffix']
@@ -36,8 +35,8 @@ def pf_run(d, input_file):
                                '-o', tmpdirname,
                                '--json', tmpdirname + '/cmd.json'],
                               env=dict(OMP_NUM_THREADS=str(num_threads)))
-        if info.returncode == 0:
-            shutil.move(f'{tmpdirname}/vis.vtu', '{input_file}.{suffix}res.vtu')
+        if info.returncode == 0 and suffix != 'nosave':
+            shutil.move(f'{tmpdirname}/vis.vtu', f'{input_file}.{suffix}res.vtu')
         else:
             print('WARNING: PolyFEM failed')
 
@@ -63,8 +62,8 @@ def bc_zoo(key):
         rhs=[0, 10, 0]
     ),
         boundary_sidesets=[
-        dict(id=1, axis=-1, position=0.01),
-        dict(id=2, axis=1, position=0.995),
+        dict(id=1, axis=-1, position=0.0),
+        dict(id=2, axis=1, position=1),
     ])
     zoo['hollowball'] = dict(problem_params = dict(
         dirichlet_boundary=[dict(id=1, value=[0., 0., 0.], dimension=[True, True, False]),
