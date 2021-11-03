@@ -60,13 +60,6 @@ vq,fq = cc_quad(v,f)
 
 
 
-
-p = mp.plot(vq,fq,shading=dict(wireframe=False))
-p.add_edges(vq,q2e(fq))
-
-
-
-
 def greedy_pairing(f):
     tt, tti = igl.triangle_triangle_adjacency(f)
     occupied = -np.ones(len(f))
@@ -93,13 +86,6 @@ def greedy_pairing(f):
 
 
 sibling, pairs = greedy_pairing(f)
-
-
-
-
-p = mp.plot(v,f,c=(sibling>=0), shading=dict(wireframe=False,colormap='viridis',flat=True))
-p.add_edges(v, q2e(np.array(pairs)))
-p.add_points(np.array([v[p].mean(axis=0) for p in cpath]), shading=dict(point_size=0.03))
 
 
 

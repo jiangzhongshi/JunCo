@@ -1,0 +1,229 @@
+{
+    "twist": {
+        "problem_params": {
+            "dirichlet_boundary": [
+                {
+                    "id": 1,
+                    "value": [
+                        "0.05*t",
+                        "0",
+                        "0"
+                    ]
+                },
+                {
+                    "id": 2,
+                    "value": [
+                        "0",
+                        "cos(t)*y + sin(t)*z - y",
+                        "-sin(t)*y + cos(t)*z - z"
+                    ]
+                }
+            ],
+            "is_time_dependent": true,
+            "rhs": [
+                0,
+                10,
+                0
+            ]
+        },
+        "boundary_sidesets": [
+            {
+                "id": 1,
+                "axis": -1,
+                "position": 0
+            },
+            {
+                "id": 2,
+                "axis": 1,
+                "position": 1
+            }
+        ]
+    },
+    "hang": {
+        "problem_params": {
+            "dirichlet_boundary": [
+                {
+                    "id": 1,
+                    "value": [
+                        "0.0",
+                        "0",
+                        "0"
+                    ]
+                },
+                {
+                    "id": 2,
+                    "value": [
+                        "0",
+                        "0",
+                        "0"
+                    ]
+                }
+            ],
+            "is_time_dependent": false,
+            "rhs": [
+                0,
+                10,
+                0
+            ]
+        },
+        "boundary_sidesets": [
+            {
+                "id": 1,
+                "axis": -1,
+                "position": 0
+            },
+            {
+                "id": 2,
+                "axis": 1,
+                "position": 1
+            }
+        ]
+    },
+    "hollowball": {
+        "problem_params": {
+            "dirichlet_boundary": [
+                {
+                    "id": 1,
+                    "value": [
+                        0,
+                        0,
+                        0
+                    ],
+                    "dimension": [
+                        true,
+                        true,
+                        false
+                    ]
+                },
+                {
+                    "id": 2,
+                    "value": [
+                        "cos(t)*(x-0.5) + sin(t) * (y-0.5)+ 0.5 - x",
+                        "-sin(t)*(x-0.5) + cos(t) * (y-0.5) + 0.5 - y",
+                        "0"
+                    ]
+                }
+            ],
+            "is_time_dependent": true,
+            "rhs": [
+                0,
+                0,
+                -0.5
+            ]
+        },
+        "boundary_sidesets": [
+            {
+                "id": 1,
+                "center": [
+                    0.5,
+                    0.5,
+                    0
+                ],
+                "radius": 0.1
+            },
+            {
+                "id": 2,
+                "center": [
+                    0.5,
+                    0.5,
+                    1
+                ],
+                "radius": 0.1
+            }
+        ]
+    },
+    "armadillo": {
+        "problem_params": {
+            "dirichlet_boundary": [
+                {
+                    "id": 1,
+                    "value": [
+                        0.2,
+                        0,
+                        0
+                    ]
+                },
+                {
+                    "id": 2,
+                    "value": [
+                        0,
+                        0,
+                        0
+                    ]
+                }
+            ],
+            "rhs": [
+                0,
+                0,
+                -0.5
+            ]
+        },
+        "boundary_sidesets": [
+            {
+                "id": 1,
+                "center": [
+                    0.1,
+                    0.9,
+                    0.6
+                ],
+                "radius": 0.05
+            },
+            {
+                "id": 2,
+                "center": [
+                    0.8,
+                    0.9,
+                    0.6
+                ],
+                "radius": 0.05
+            }
+        ]
+    },
+    "bunny": {
+        "problem_params": {
+            "dirichlet_boundary": [
+                {
+                    "id": 1,
+                    "value": [
+                        1,
+                        0,
+                        0
+                    ]
+                },
+                {
+                    "id": 2,
+                    "value": [
+                        0,
+                        0,
+                        0
+                    ]
+                }
+            ],
+            "rhs": [
+                0,
+                0,
+                -0.5
+            ]
+        },
+        "boundary_sidesets": [
+            {
+                "id": 1,
+                "center": [
+                    0.5,
+                    0.8,
+                    0.3
+                ],
+                "radius": 0.1
+            },
+            {
+                "id": 2,
+                "center": [
+                    0.2,
+                    0.8,
+                    0.1
+                ],
+                "radius": 0.1
+            }
+        ]
+    }
+}
