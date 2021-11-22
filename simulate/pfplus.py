@@ -37,6 +37,7 @@ def pf_run(d, input_file):
                               env=dict(OMP_NUM_THREADS=str(num_threads)))
         if info.returncode == 0 and suffix != 'nosave':
             shutil.move(f'{tmpdirname}/vis.vtu', f'{input_file}.{suffix}res.vtu')
+            print('Success')
         else:
             print('WARNING: PolyFEM failed')
 
@@ -67,9 +68,29 @@ def tubes(input_file, order=1, n_refs=0, steps=10, tdelta=0.3, suffix='', setup=
     if d['discr_order'] > 1:
         d['lump_mass_matrix'] = True
     d.update(dict(suffix=suffix, num_threads=2, check_hess=False))
-    d.update(kwargs)
-    
+    merge_args(d, kwargs)
+
     pf_run(d, input_file)
+
+def merge_args(m_d, kwargs):
+    def dict_merge(dct, merge_dct):
+        for k, v in merge_dct.items():
+            if (k in dct and isinstance(v, dict)):
+                dict_merge(dct[k], v)
+            else:
+                dct[k] = v
+    def key2dict(k,v):
+        newdict = dict()
+        if '.' in k:
+            first, rest = k.split('.',1)
+            newdict[first] = key2dict(rest, v)
+        else:
+          newdict[k] = v
+        return newdict
+
+    for k, v in kwargs.items():
+      dict_merge(m_d, key2dict(k,v))
+
 
 if __name__ == '__main__':
     import fire
