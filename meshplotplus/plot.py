@@ -1,3 +1,5 @@
+### Misc utilities to improve meshplot
+
 import numpy as np
 import igl
 import meshplot as mp

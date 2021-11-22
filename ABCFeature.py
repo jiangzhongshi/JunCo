@@ -48,15 +48,3 @@ for f in tqdm.tqdm(h5files):
     if len({tuple(sorted(e)) for e in dE} - {tuple(sorted(e)) for e in E}) != 0:
         stranges.append(f)
 
-
-# In[122]:
-
-
-stranges
-
-
-# In[119]:
-
-
-len(stranges)/ len(h5files)
-

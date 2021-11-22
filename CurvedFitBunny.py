@@ -9,23 +9,11 @@ import tqdm
 import osqp
 from cubic_fitting import *
 
-
-# In[2]:
-
-
 _, _, sB, sT, V, F,_ = h5deser('../buildr/bunny.off.h5')
-
-
-# In[3]:
-
 
 sB,_ = igl.upsample(sB,F,2)
 sT,_ = igl.upsample(sT,F,2)
 V,F = igl.upsample(V,F,2)
-
-
-# In[4]:
-
 
 basis = bernstein_basis()
 newV, newF, newE, SVI, SVJ, values_at_points, all_base, all_dir, all_global_ids = upsampled(sB, sT, F, basis, edge_globals(F), level=3)

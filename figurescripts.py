@@ -1,3 +1,5 @@
+### Scripts for generating figures in the Shell paper.
+
 from vis_utils import *
 
 def heat_create():
